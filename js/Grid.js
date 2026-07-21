@@ -59,7 +59,7 @@ export class Grid {
                 const cell = this.cells[i][j];
                 if (!cell.isMine) {
                     const neighbors = this.getNeighbors(i, j);
-                    const mineCount = neighbors.filter(neighbor => neighbor.cell.isMine).length;
+                    const mineCount = neighbors.filter(n => n.cell.isMine).length;
                     cell.neighborMines = mineCount;
                 }
             }
@@ -74,6 +74,11 @@ export class Grid {
 
         cell.reveal();
         
+        if (cell.isMine) {
+            // game over
+            return;
+        }
+
         if (cell.neighborMines === 0 && !cell.isMine) {
             this.floodFill(row, col);
         }
@@ -82,6 +87,20 @@ export class Grid {
     floodFill(row, col) {
         const queue = [];
         let head = 0;
+        
+        queue.push([row, col]);
+        while (head < queue.length) {
+            const [currentRow, currentCol] = queue[head++];
+            const neighbors = this.getNeighbors(currentRow, currentCol);
 
+            for (const n of neighbors) {
+                if (n.cell.isVisible) continue;
+                if (n.cell.isMine) continue;
+
+                n.cell.reveal();
+
+                if (n.cell.neighborMines === 0) queue.push([n.row, n.col]);
+            }
+        }
     }
 }
