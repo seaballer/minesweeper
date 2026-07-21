@@ -5,8 +5,13 @@ export class Grid {
         this.rows = rows;
         this.cols = cols;
         this.mineCount = mineCount;
-        this.remainingCells = rows * cols - mineCount;
+        this.remainingSafeCells = rows * cols - mineCount;
         this.cells = this.createGrid();
+    }
+
+    initialize() {
+        this.placeMines();
+        this.countNeighborMines();
     }
 
     createGrid() {
@@ -79,16 +84,18 @@ export class Grid {
         }
 
         if (cell.reveal()) {
-            this.remainingCells--;
+            this.remainingSafeCells--;
         }
 
         if (cell.neighborMines === 0) {
             this.floodFill(row, col);
         }
 
-        if (this.remainingCells === 0) {
+        if (this.remainingSafeCells === 0) {
             return "win";
         }
+
+        return "playing";
     }
 
     floodFill(row, col) {
@@ -102,10 +109,10 @@ export class Grid {
 
             for (const n of neighbors) {
                 if (n.cell.isVisible) continue;
-                //if (n.cell.isMine) continue; -- unnecessary protection
+                if (n.cell.isMine) continue; // its extra protection but in practice this doesnt really happen since the queue only expands on safe slots anyway
 
                 if (n.cell.reveal()) {
-                    this.remainingCells--;
+                    this.remainingSafeCells--;
                 }
 
                 if (n.cell.neighborMines === 0) {
