@@ -1,9 +1,11 @@
 import { Cell } from './Cell.js';
 
 export class Grid {
-    constructor(rows, cols) {
+    constructor(rows, cols, mineCount) {
         this.rows = rows;
         this.cols = cols;
+        this.mineCount = mineCount;
+        this.remainingCells = rows * cols - mineCount;
         this.cells = this.createGrid();
     }
 
@@ -18,10 +20,10 @@ export class Grid {
         return grid;
     }
 
-    placeMines(mineCount) { // could redo with shuffle method later
+    placeMines() { // could redo with shuffle method later
         let placedMines = 0;
 
-        while (placedMines < mineCount) {
+        while (placedMines < this.mineCount) {
             const row = Math.floor(Math.random() * this.rows);
             const col = Math.floor(Math.random() * this.cols);
 
@@ -59,28 +61,33 @@ export class Grid {
                 const cell = this.cells[i][j];
                 if (!cell.isMine) {
                     const neighbors = this.getNeighbors(i, j);
-                    const mineCount = neighbors.filter(n => n.cell.isMine).length;
-                    cell.neighborMines = mineCount;
+                    cell.neighborMines = neighbors.filter(n => n.cell.isMine).length;
                 }
             }
         }    
     }
 
-    revealCell(row, col) {  // todo: add game over and win checks
+    revealCell(row, col) {
         const cell = this.cells[row][col];
+
         if (cell.isVisible || cell.isFlagged) {
             return;
         }
-
-        cell.reveal();
-        
         if (cell.isMine) {
-            // game over
-            return;
+            cell.reveal();
+            return "gameover";
         }
 
-        if (cell.neighborMines === 0 && !cell.isMine) {
+        if (cell.reveal()) {
+            this.remainingCells--;
+        }
+
+        if (cell.neighborMines === 0) {
             this.floodFill(row, col);
+        }
+
+        if (this.remainingCells === 0) {
+            return "win";
         }
     }
 
@@ -95,11 +102,15 @@ export class Grid {
 
             for (const n of neighbors) {
                 if (n.cell.isVisible) continue;
-                if (n.cell.isMine) continue;
+                //if (n.cell.isMine) continue; -- unnecessary protection
 
-                n.cell.reveal();
+                if (n.cell.reveal()) {
+                    this.remainingCells--;
+                }
 
-                if (n.cell.neighborMines === 0) queue.push([n.row, n.col]);
+                if (n.cell.neighborMines === 0) {
+                    queue.push([n.row, n.col]);
+                }
             }
         }
     }
