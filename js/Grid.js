@@ -80,6 +80,7 @@ export class Grid {
         }
         if (cell.isMine) {
             cell.reveal();
+            cell.isExploded = true;
             return "gameover";
         }
 

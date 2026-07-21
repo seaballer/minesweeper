@@ -1,6 +1,7 @@
 export class Cell {
     constructor() {
         this.isMine = false;
+        this.isExploded = false;
         this.isFlagged = false;
         this.isVisible = false;
         this.neighborMines = 0;
