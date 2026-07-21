@@ -11,6 +11,7 @@ export class Cell {
     }
 
     toggleFlag() {
+        if (this.isVisible) return;
         this.isFlagged = !this.isFlagged;
     }
 
