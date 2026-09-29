@@ -13,12 +13,12 @@ npm run dev     # http://localhost:5173
 
 Other scripts:
 
-| Command | Does |
-| --- | --- |
-| `npm run dev` | Dev server with hot reload |
-| `npm run build` | Production bundle into `dist/` |
-| `npm run preview` | Serve the built bundle |
-| `npm test` | Mounts the UI in jsdom and drives it |
+| Command             | Does                                 |
+| ------------------- | ------------------------------------ |
+| `npm run dev`     | Dev server with hot reload           |
+| `npm run build`   | Production bundle into `dist/`      |
+| `npm run preview` | Serve the built bundle               |
+| `npm test`        | Mounts the UI in jsdom and drives it |
 
 To poke at the game logic without a browser, run the model directly in Node:
 
@@ -74,12 +74,12 @@ To inspect a board without playing it, trigger placement directly with `grid.ens
 
 Reveals a cell and floods outward through any zero-count cells. Returns the game state, which is also readable at `grid.status`:
 
-| Return value | Meaning |
-| --- | --- |
-| `"playing"` | Reveal succeeded, game continues |
-| `"win"` | Last safe cell revealed |
-| `"gameover"` | A mine was revealed |
-| `undefined` | No-op: the cell was already visible or is flagged |
+| Return value   | Meaning                                           |
+| -------------- | ------------------------------------------------- |
+| `"playing"`  | Reveal succeeded, game continues                  |
+| `"win"`      | Last safe cell revealed                           |
+| `"gameover"` | A mine was revealed                               |
+| `undefined`  | No-op: the cell was already visible or is flagged |
 
 Two rules to be aware of:
 
@@ -116,31 +116,31 @@ Roughly in the order they'd unblock each other.
 
 ### Make it playable
 
-- [x] Render the board to the DOM
-- [x] Wire up clicks: left click reveals, right click toggles a flag
-- [x] Re-render on state change
-- [x] Show the mine counter and a reset button
-- [x] Display win / game-over state and stop accepting input
-- [x] Difficulty presets (Beginner 9×9/10, Intermediate 16×16/40, Expert 30×16/99)
-- [x] Move the UI to React with Vite and Material UI
-- [x] Keyboard flagging with `f`
+- [X] Render the board to the DOM
+- [X] Wire up clicks: left click reveals, right click toggles a flag
+- [X] Re-render on state change
+- [X] Show the mine counter and a reset button
+- [X] Display win / game-over state and stop accepting input
+- [X] Difficulty presets (Beginner 9×9/10, Intermediate 16×16/40, Expert 30×16/99)
+- [X] Move the UI to React with Vite and Material UI
+- [X] Keyboard flagging with `f`
 - [ ] Long-press to flag on touch devices (right click doesn't exist there)
 - [ ] Mark incorrect flags at game over (a flag on a safe cell)
 
 ### Fix the issues listed above
 
-- [x] Add first-click safety: `placeMines()` runs on the first `revealCell` and excludes that cell
-- [x] Make `floodFill` skip flagged cells
-- [x] Reveal all mines on game over (and on win, for a legible final board)
-- [x] Guard `mineCount` against exceeding `rows * cols` (clamped in the constructor)
-- [x] Make a decided game terminal so a win can't become a loss
+- [X] Add first-click safety: `placeMines()` runs on the first `revealCell` and excludes that cell
+- [X] Make `floodFill` skip flagged cells
+- [X] Reveal all mines on game over (and on win, for a legible final board)
+- [X] Guard `mineCount` against exceeding `rows * cols` (clamped in the constructor)
+- [X] Make a decided game terminal so a win can't become a loss
 - [ ] Decide what `revealCell` should return on a no-op — `undefined` is inconsistent with the documented states
 - [ ] Validate out-of-range coordinates instead of throwing a raw `TypeError`
 
 ### Structure and polish
 
-- [x] Replace the empty `Game.js` stub with `useMinesweeper` as the controller
-- [x] Move board sizes into `difficulties.js` config
+- [X] Replace the empty `Game.js` stub with `useMinesweeper` as the controller
+- [X] Move board sizes into `difficulties.js` config
 - [ ] Persist best times per difficulty
 - [ ] Add a seed input for shareable/reproducible boards
 - [ ] Keyboard navigation and focus management across the board
@@ -148,7 +148,7 @@ Roughly in the order they'd unblock each other.
 
 ### Testing
 
-- [x] Add a `test` script and a jsdom harness driving the real components
+- [X] Add a `test` script and a jsdom harness driving the real components
 - [ ] Add `node:test` unit tests for the model: `placeMines` determinism and exact mine count, `countNeighborMines` correctness, flood fill boundaries, win detection
 - [ ] Cover the remaining edge cases: the 1×1/1-mine board, out-of-range coordinates
 
