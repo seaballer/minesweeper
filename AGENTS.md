@@ -18,12 +18,14 @@ Vanilla JS Minesweeper. No `package.json`, no build, no test runner, no linter, 
 
 ## `Grid` contracts worth knowing before you call it
 
-- The constructor **only builds cells**; mines and neighbor counts are set by a separate `initialize()`. Forget it and you get a silent, empty, all-zero grid — no error.
+- The constructor allocates cells and `initialize()` resets them, but **neither places mines**. Placement is deferred to the first `revealCell` via `ensureMinesPlaced`, so the opening click is always safe. Until that happens the board has no mines and all `neighborMines` are 0 — a valid-looking grid that will surprise you if you expect mines right after `initialize()`.
 - `revealCell(row, col)` returns `"playing" | "win" | "gameover"`, but returns **`undefined`** when the cell is already visible or is flagged. Don't assume a string back.
-- `floodFill` does not skip flagged cells: a flagged neighbor is revealed while keeping its flag. Pre-existing behavior, not a contract.
-- No first-click safety — mines are placed in `initialize()` before any click, so the first click can hit one (measured: ~29/200 center clicks on 9×9/10).
+- `grid.status` holds `"ready" | "playing" | "win" | "gameover"`. Once it's `win` or `gameover` the game is terminal: further `revealCell` calls return that status and don't change the board.
+- Flood fill skips flagged cells and mines, and doesn't expand through them.
+- On a 1×1 board with 1 mine there is no safe first cell, so the opening click loses. Unavoidable, not a bug.
+- Out-of-range coordinates throw a raw `TypeError` from the array lookup; there's no bounds checking.
 - `remainingSafeCells` only decrements when `Cell.reveal()` returns `true` (i.e. the cell wasn't already visible). Win is an exact `=== 0` check.
-- `placeMines` is a seeded Fisher-Yates shuffle (`mulberry32`) over flat cell indices, not rejection sampling. Pass a 4th constructor arg to make a board reproducible: `new Grid(9, 9, 10, 1234)`. Omit it and the seed auto-increments from a clock base, so successive grids differ.
+- `placeMines` is a seeded Fisher-Yates shuffle (`mulberry32`) over flat cell indices. Pass a 4th constructor arg to make a board reproducible: `new Grid(9, 9, 10, 1234)`. Omit it and the seed auto-increments from a clock base, so successive grids differ. `mineCount` is clamped to `rows * cols`.
 
 ## Conventions
 

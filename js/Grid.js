@@ -23,15 +23,22 @@ export class Grid {
     constructor(rows, cols, mineCount, seed) {
         this.rows = rows;
         this.cols = cols;
-        this.mineCount = mineCount;
+        this.mineCount = Math.min(mineCount, rows * cols);
         this.seed = seed ?? nextSeed++;
-        this.remainingSafeCells = rows * cols - mineCount;
+        this.remainingSafeCells = rows * cols - this.mineCount;
         this.cells = this.createGrid();
+        this.minesPlaced = false;
+        this.status = "ready";
     }
 
+    // Resets to a fresh, unplayed board. Mines are deliberately NOT placed
+    // here: they are placed on the first revealCell so the opening click is
+    // always safe. See ensureMinesPlaced.
     initialize() {
-        this.placeMines();
-        this.countNeighborMines();
+        this.cells = this.createGrid();
+        this.remainingSafeCells = this.rows * this.cols - this.mineCount;
+        this.minesPlaced = false;
+        this.status = "ready";
     }
 
     createGrid() {
@@ -45,14 +52,42 @@ export class Grid {
         return grid;
     }
 
-    placeMines() {
-        // Build a flat list of every cell, shuffle it with Fisher-Yates, then
-        // take the first mineCount entries. The first `mineCount` cells of a
-        // uniform shuffle are a uniform sample, so this matches the old
-        // rejection-sampling distribution without the retry loop.
+    // Places mines if they aren't placed yet, guaranteeing that (safeRow,
+    // safeCol) is not a mine. Called on the first revealCell so a player's
+    // opening click can never lose.
+    ensureMinesPlaced(safeRow, safeCol) {
+        if (this.minesPlaced) {
+            return;
+        }
+
+        this.placeMines(safeRow, safeCol);
+        this.countNeighborMines();
+        this.minesPlaced = true;
+    }
+
+    // Builds a flat list of every cell, shuffle it with Fisher-Yates, then
+    // take the first mineCount entries. The first `mineCount` cells of a
+    // uniform shuffle are a uniform sample, so this matches plain rejection
+    // sampling without the retry loop.
+    //
+    // When safeRow/safeCol are in bounds that cell is left out of the
+    // candidate list, so it cannot be mined. If excluding it would leave too
+    // few cells to satisfy mineCount (e.g. a 1x1 board with 1 mine), the
+    // exclusion is dropped rather than under-filling the board.
+    placeMines(safeRow, safeCol) {
+        const total = this.rows * this.cols;
+        const canExclude = total - 1 >= this.mineCount;
+        const safePosition = safeRow * this.cols + safeCol;
+        const safeInBounds = canExclude
+            && safeRow >= 0 && safeRow < this.rows
+            && safeCol >= 0 && safeCol < this.cols;
+
         const positions = [];
         for (let i = 0; i < this.rows; i++) {
             for (let j = 0; j < this.cols; j++) {
+                if (safeInBounds && i * this.cols + j === safePosition) {
+                    continue;
+                }
                 positions.push(i * this.cols + j);
             }
         }
@@ -104,15 +139,24 @@ export class Grid {
     }
 
     revealCell(row, col) {
+        // Once the game is decided it stops accepting input, so a won game
+        // can't be flipped to a loss by clicking a revealed mine.
+        if (this.status === "win" || this.status === "gameover") {
+            return this.status;
+        }
+
+        // First click of a game decides the layout, so it is never a mine.
+        this.ensureMinesPlaced(row, col);
+
         const cell = this.cells[row][col];
 
         if (cell.isVisible || cell.isFlagged) {
             return;
         }
         if (cell.isMine) {
-            cell.reveal();
-            cell.isExploded = true;
-            return "gameover";
+            this.revealAllMines(row, col);
+            this.status = "gameover";
+            return this.status;
         }
 
         if (cell.reveal()) {
@@ -124,16 +168,36 @@ export class Grid {
         }
 
         if (this.remainingSafeCells === 0) {
-            return "win";
+            this.revealAllMines();
+            this.status = "win";
+            return this.status;
         }
 
-        return "playing";
+        this.status = "playing";
+        return this.status;
+    }
+
+    // Uncovers every mine, used both on a loss and on a win so the final board
+    // is fully legible. The mine that was clicked is marked as exploded.
+    revealAllMines(explodedRow, explodedCol) {
+        for (let i = 0; i < this.rows; i++) {
+            for (let j = 0; j < this.cols; j++) {
+                const cell = this.cells[i][j];
+                if (!cell.isMine) {
+                    continue;
+                }
+                cell.reveal();
+                if (i === explodedRow && j === explodedCol) {
+                    cell.isExploded = true;
+                }
+            }
+        }
     }
 
     floodFill(row, col) {
         const queue = [];
         let head = 0;
-        
+
         queue.push([row, col]);
         while (head < queue.length) {
             const [currentRow, currentCol] = queue[head++];
@@ -141,7 +205,8 @@ export class Grid {
 
             for (const n of neighbors) {
                 if (n.cell.isVisible) continue;
-                if (n.cell.isMine) continue; // its extra protection but in practice this doesnt really happen since the queue only expands on safe slots anyway
+                if (n.cell.isMine) continue;
+                if (n.cell.isFlagged) continue;
 
                 if (n.cell.reveal()) {
                     this.remainingSafeCells--;
