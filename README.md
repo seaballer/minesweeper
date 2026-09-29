@@ -1,37 +1,51 @@
 # Minesweeper
 
-A browser Minesweeper built with plain ES modules — no framework, no build step, no dependencies.
+A browser Minesweeper built with React and Material UI, on Vite.
 
-> **Status: work in progress.** The game logic is complete and tested by hand, but there is no user interface yet. The board renders to the browser console, not to the page. See [To-do](#to-do).
+> **Status: playable.** The game logic and UI are both working. See [To-do](#to-do) for what's next.
 
 ## Running it
 
-The page loads JavaScript as an ES module, which browsers block over `file://`. You need a local server:
-
 ```bash
-python3 -m http.server 8000
+npm install     # first time only
+npm run dev     # http://localhost:5173
 ```
 
-Then open <http://localhost:8000>.
+Other scripts:
 
-To poke at the game logic without a browser:
+| Command | Does |
+| --- | --- |
+| `npm run dev` | Dev server with hot reload |
+| `npm run build` | Production bundle into `dist/` |
+| `npm run preview` | Serve the built bundle |
+
+To poke at the game logic without a browser, run the model directly in Node:
 
 ```bash
-node js/main.js
+node --input-type=module -e "import('./src/game/Grid.js').then(m => { const g = new m.Grid(9,9,10,1); g.revealCell(4,4); console.log(g.status); })"
 ```
-
-This prints the grid and a `console.table` of the board. Node 20.19+ auto-detects ES module syntax, so no `package.json` or `--experimental` flag is needed.
 
 ## Layout
 
-| File | Role |
-| --- | --- |
-| `index.html` | Page shell. Loads `js/main.js` as a module. `<body>` is currently empty. |
-| `js/main.js` | Entrypoint. Builds a 9×9 board with 10 mines and logs it. |
-| `js/Grid.js` | The model. Board state, mine placement, flood fill, win detection. |
-| `js/Cell.js` | A single cell: mine, flag, visibility, adjacent mine count. |
-| `js/Game.js` | **Stub.** Declared but empty and not imported anywhere. |
-| `style.css` | Empty, and not referenced from `index.html` yet. |
+```
+src/
+  main.jsx                  React entry; mounts App in the theme provider
+  App.jsx                   Layout only, no game logic
+  theme.js                  The single MUI theme
+  hooks/
+    useMinesweeper.js       Owns game state; the only place the model is mutated
+  game/                     Plain JavaScript, no React or MUI imports
+    Grid.js                 Board state, mine placement, flood fill, win detection
+    Cell.js                 A single cell
+    difficulties.js         Board size presets
+  components/               Presentational; no game state
+    Board.jsx               Grid layout
+    CellButton.jsx          One cell
+    ControlBar.jsx          Mine counter, difficulty, reset
+    StatusBanner.jsx        Win / loss message
+```
+
+The model layer is deliberately framework-free, so the rules stay testable in Node without a DOM.
 
 ## API
 
@@ -92,6 +106,7 @@ first version have been smoothed out; what remains is noted here.
   and does not block the expansion.
 - **Out-of-range coordinates throw a `TypeError`** rather than a friendly
   error. Validate at the UI layer.
+- **Flagging needs a right click**, so it doesn't work on touch devices yet.
 
 ## To-do
 
@@ -99,12 +114,15 @@ Roughly in the order they'd unblock each other.
 
 ### Make it playable
 
-- [ ] Render the board to the DOM — grid of buttons/divs reflecting `cell.isVisible`, `isFlagged`, `isMine`, `neighborMines`
-- [ ] Wire up clicks: left click reveals, right click (or long press on touch) toggles a flag
-- [ ] Re-render on state change, or render from `grid` after every `revealCell`
-- [ ] Show the mine counter (from `grid.mineCount` minus flags) and a reset button
-- [ ] Display win / game-over state and stop accepting input
-- [ ] Link `style.css` from `index.html` and give the board a basic look
+- [x] Render the board to the DOM
+- [x] Wire up clicks: left click reveals, right click toggles a flag
+- [x] Re-render on state change
+- [x] Show the mine counter and a reset button
+- [x] Display win / game-over state and stop accepting input
+- [x] Difficulty presets (Beginner 9×9/10, Intermediate 16×16/40, Expert 30×16/99)
+- [x] Move the UI to React with Vite and Material UI
+- [ ] Long-press to flag on touch devices (right click doesn't exist there)
+- [ ] Mark incorrect flags at game over (a flag on a safe cell)
 
 ### Fix the issues listed above
 
@@ -115,20 +133,26 @@ Roughly in the order they'd unblock each other.
 - [x] Make a decided game terminal so a win can't become a loss
 - [ ] Decide what `revealCell` should return on a no-op — `undefined` is inconsistent with the documented states
 - [ ] Validate out-of-range coordinates instead of throwing a raw `TypeError`
-- [ ] Mark incorrect flags at game over (flagged cells that turned out to be safe)
 
 ### Structure and polish
 
-- [ ] Fill in `Game.js` as the controller holding game state, or delete it if `Grid` is doing the job
-- [ ] Move board size and mine count out of the hardcoded `new Grid(9, 9, 10)` into config; add difficulty presets
+- [x] Replace the empty `Game.js` stub with `useMinesweeper` as the controller
+- [x] Move board sizes into `difficulties.js` config
 - [ ] Persist best times per difficulty
 - [ ] Add a seed input for shareable/reproducible boards
+- [ ] Keyboard navigation and focus management across the board
+- [ ] Chording (click both buttons on a numbered cell to reveal neighbors)
 
 ### Testing
 
-- [ ] Add a test runner (Node's built-in `node:test` needs no dependencies) and cover `placeMines` determinism and exact mine count, `countNeighborMines` correctness, flood fill boundaries, and win detection
-- [ ] Add a `test` script once there's a `package.json`
+- [ ] Add a test runner (`node:test` needs no dependencies) covering `placeMines` determinism and exact mine count, `countNeighborMines` correctness, flood fill boundaries, and win detection
+- [ ] Add a `test` script
+- [ ] Add component tests for the board, flagging, and difficulty switching
 
 ## Contributing
 
-Keep it dependency-free and buildless. Match the existing style: named ES module exports, classes, 4-space indent.
+Model code in `src/game/` stays framework-free — no React or MUI imports — so it can be exercised in Node without a DOM. UI components stay presentational: they take props and hold no game state, and all mutation goes through `useMinesweeper`.
+
+> **Careful:** `Grid` mutates `Cell` objects in place, so a `Cell` reference never changes between renders. Never pass one into a `memo`ized component — the prop comparison will always match and the component will stop repainting. `CellButton` takes flat primitives for exactly this reason.
+
+Match the existing style: function components, named exports, 4-space indent, MUI `sx` props for styling.
