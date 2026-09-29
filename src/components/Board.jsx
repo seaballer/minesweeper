@@ -7,17 +7,25 @@ import CellButton from './CellButton.jsx';
 export default function Board({ grid, onReveal, onFlag, disabled }) {
     return (
         <Box
-            role="grid"
+            // `group`, not `grid`: a real ARIA grid requires owned row/gridcell
+            // elements and 2-D arrow-key navigation, which this doesn't
+            // implement. `group` labels the set without promising a structure
+            // that isn't there.
+            id="minefield"
+            role="group"
             aria-label="Minefield"
             sx={{
                 display: 'grid',
                 gridTemplateColumns: `repeat(${grid.cols}, 30px)`,
-                gap: '2px',
-                p: 1.5,
-                bgcolor: 'background.paper',
+                gap: '3px',
+                p: 2,
+                // Recessed bezel: the board reads as a panel sunk into the
+                // page rather than a card sitting on top of it.
+                backgroundColor: 'board.bezel',
+                borderRadius: 2,
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05), 0 20px 50px rgba(0,0,0,0.45)',
                 border: '1px solid',
-                borderColor: 'divider',
-                borderRadius: 1,
+                borderColor: 'board.border',
                 width: 'fit-content',
             }}
         >

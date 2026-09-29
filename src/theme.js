@@ -1,33 +1,72 @@
 import { createTheme } from '@mui/material/styles';
 
-// Minimal, Material-inspired theme. Neutrals with a single blue accent keeps
-// the board legible without competing for attention.
+// Industrial instrument-panel direction: a dark field, cool blue as the only
+// structural accent, amber/red reserved for mines and loss. One dominant
+// surface with selective highlights rather than an evenly weighted palette.
 const theme = createTheme({
     palette: {
-        mode: 'light',
-        primary: { main: '#1976d2' },
-        background: { default: '#f5f5f5', paper: '#ffffff' },
+        mode: 'dark',
+        primary: { main: '#4a9eff' },
+        secondary: { main: '#f0a02a' },
+        error: { main: '#ff5a52' },
+        success: { main: '#3ddc84' },
+        background: { default: '#0b0d10', paper: '#14181d' },
+        text: { primary: '#e8ecf1', secondary: '#8b96a5' },
+        divider: 'rgba(255,255,255,0.08)',
     },
-    shape: {
-        borderRadius: 8,
+    shape: { borderRadius: 6 },
+    // Board-specific surfaces. These live here so components reference tokens
+    // instead of repeating hex values that drift apart.
+    board: {
+        // Recessed bezel behind the cells.
+        bezel: '#0f1317',
+        // Raised (hidden) cell gradient stops.
+        keyTop: '#232a33',
+        keyBottom: '#1a1f26',
+        keyHoverTop: '#2b333d',
+        keyHoverBottom: '#20262e',
+        // Revealed cell wash, layered over the bezel.
+        revealed: 'rgba(255,255,255,0.035)',
+        // Mine tint on a revealed cell.
+        mineTint: 'rgba(255,90,82,0.14)',
+        border: 'rgba(255,255,255,0.07)',
     },
+    mono: '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace',
     typography: {
-        fontFamily: [
-            '-apple-system',
-            'BlinkMacSystemFont',
-            '"Segoe UI"',
-            'Roboto',
-            'Helvetica',
-            'Arial',
-            'sans-serif',
-        ].join(','),
-        h5: { fontWeight: 500 },
+        fontFamily: '"Space Grotesk", system-ui, -apple-system, sans-serif',
+        // Tabular figures keep the mine counter and revealed numbers from
+        // shifting width as they change.
+        h5: { fontWeight: 600, letterSpacing: '-0.02em' },
+        h6: { fontWeight: 600 },
+        body2: { color: '#8b96a5' },
+        button: { fontWeight: 500, letterSpacing: '0.01em' },
     },
     components: {
         MuiButton: {
-            // Flat, low-emphasis buttons suit the minimalist look.
+            defaultProps: { disableElevation: true },
             styleOverrides: {
                 root: { textTransform: 'none' },
+            },
+        },
+        MuiToggleButton: {
+            styleOverrides: {
+                root: {
+                    textTransform: 'none',
+                    borderColor: 'rgba(255,255,255,0.10)',
+                    color: '#8b96a5',
+                    '&.Mui-selected': {
+                        backgroundColor: 'rgba(74,158,255,0.16)',
+                        color: '#4a9eff',
+                    },
+                    '&.Mui-selected:hover': {
+                        backgroundColor: 'rgba(74,158,255,0.24)',
+                    },
+                },
+            },
+        },
+        MuiToggleButtonGroup: {
+            styleOverrides: {
+                root: { backgroundColor: 'rgba(255,255,255,0.03)' },
             },
         },
     },

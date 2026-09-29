@@ -9,16 +9,19 @@ testable outside a browser.
 - `npm run dev` — Vite dev server on <http://localhost:5173>
 - `npm run build` — production bundle into `dist/`
 - `npm run preview` — serve the built bundle
-- There is **no test runner**. To check the model, run it directly in Node:
+- `npm test` — mounts the components in jsdom and drives them (37 assertions)
+- To check the model alone, run it directly in Node:
   `node --input-type=module -e "import('./src/game/Grid.js').then(m => { const g = new m.Grid(9,9,10,1); g.revealCell(4,4); console.log(g.status); })"`
   The 4th `Grid` arg is a seed, so results are reproducible.
-- `node_modules/` and `dist/` are gitignored. Never commit them.
+- `node_modules/`, `dist/`, and `.opencode/` are gitignored. Never commit them.
 
 ## Architecture
 
 - `src/main.jsx` — React entry. Mounts `App` inside `ThemeProvider` + `CssBaseline`.
 - `src/App.jsx` — layout only. Holds no game logic; it calls `useMinesweeper()` and passes results down.
-- `src/theme.js` — the single MUI theme. Change colors/typography here, not per component.
+- `src/theme.js` — the single source of design tokens. Palette, typography, the `board.*` surface tokens, and the `mono` font stack live here; components reference tokens instead of hex values.
+- `src/index.css` — global shell only: font import, page background, reduced-motion. Everything else is themed or `sx`.
+- `ui-check.mjs` — the `npm test` harness. jsdom + Vite SSR; no browser needed.
 - `src/hooks/useMinesweeper.js` — **the only place game state is mutated.** Owns the `Grid` instance and exposes `reveal`, `toggleFlag`, `reset`, `changeDifficulty`.
 - `src/game/Grid.js` — model: mine placement, flood fill, win detection. No DOM, no React.
 - `src/game/Cell.js` — single cell state. No DOM, no React.
@@ -37,6 +40,21 @@ is not hypothetical — it shipped a bug where clicking a cell revealed nothing.
 adding props. See the "Model mutates in place" note in the hook for the other
 half of this problem.
 
+## The other silent-failure trap: gradients
+
+**A gradient passed to `backgroundColor` is silently dropped.** It accepts only
+a `<color>`; the declaration is invalid, so the cell renders fully transparent
+and the "raised key" look disappears — with no error anywhere. This shipped once.
+
+Use `backgroundImage` for gradients, `backgroundColor` for flat colors. Verify
+with the CSS engine directly rather than by eye:
+
+```bash
+node -e "const {JSDOM}=require('jsdom');const d=new JSDOM('<div/>');const e=d.window.document.querySelector('div');e.style.backgroundColor='linear-gradient(#fff,#000)';console.log(JSON.stringify(e.style.backgroundColor))"
+```
+
+An empty string means the value was rejected. `npm test` asserts this too.
+
 ## `Grid` contracts worth knowing before you call it
 
 - The constructor allocates cells and `initialize()` resets them, but **neither places mines**. Placement is deferred to the first `revealCell` via `ensureMinesPlaced`, so the opening click is always safe. Until then the board has no mines and all `neighborMines` are 0.
@@ -51,5 +69,17 @@ half of this problem.
 ## Conventions
 
 - `.jsx` for components, `.js` for plain modules. Named exports, function components, 4-space indent.
-- Styling is MUI `sx` props only — no CSS files, no CSS-in-JS beyond `sx`. The empty `style.css` from the pre-React version is gone; don't reintroduce one.
+- Styling is MUI `sx` props against theme tokens. `src/index.css` is the only stylesheet and is limited to the page shell. Don't add component CSS.
+- Colors come from `theme.js` — `board.*`, the palette, and `theme.mono`. A hardcoded hex in a component is a regression; it drifts the moment a token changes.
+- The board uses `role="group"`, not `role="grid"`. A real ARIA grid needs owned `row`/`gridcell` elements and 2-D arrow-key navigation, which this doesn't implement. Don't upgrade the role without also building the pattern.
+- The result banner and the mine counter are persistent live regions (`role="status"`). Keep them mounted: a live region that appears with its own content is usually silent.
 - Grid uses 4-space indent and no trailing newline on its final brace. Match surrounding style rather than reformatting files you touch.
+
+## Design direction
+
+Industrial instrument panel: dark field, cool blue as the only structural
+accent, amber/red reserved for mines and loss. Hidden cells are raised keys
+(gradient face, top highlight, bottom shadow); revealed cells are flat. Motion is
+limited to one short pop on reveal so a cascade reads as a sequence. No
+`background-attachment: fixed` or fixed overlays — they repaint on every scroll
+frame on mobile.

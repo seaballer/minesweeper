@@ -18,6 +18,7 @@ Other scripts:
 | `npm run dev` | Dev server with hot reload |
 | `npm run build` | Production bundle into `dist/` |
 | `npm run preview` | Serve the built bundle |
+| `npm test` | Mounts the UI in jsdom and drives it |
 
 To poke at the game logic without a browser, run the model directly in Node:
 
@@ -106,7 +107,8 @@ first version have been smoothed out; what remains is noted here.
   and does not block the expansion.
 - **Out-of-range coordinates throw a `TypeError`** rather than a friendly
   error. Validate at the UI layer.
-- **Flagging needs a right click**, so it doesn't work on touch devices yet.
+- **Flagging needs a right click or the `f` key**, so it doesn't work on touch
+  devices yet.
 
 ## To-do
 
@@ -121,6 +123,7 @@ Roughly in the order they'd unblock each other.
 - [x] Display win / game-over state and stop accepting input
 - [x] Difficulty presets (Beginner 9×9/10, Intermediate 16×16/40, Expert 30×16/99)
 - [x] Move the UI to React with Vite and Material UI
+- [x] Keyboard flagging with `f`
 - [ ] Long-press to flag on touch devices (right click doesn't exist there)
 - [ ] Mark incorrect flags at game over (a flag on a safe cell)
 
@@ -145,9 +148,9 @@ Roughly in the order they'd unblock each other.
 
 ### Testing
 
-- [ ] Add a test runner (`node:test` needs no dependencies) covering `placeMines` determinism and exact mine count, `countNeighborMines` correctness, flood fill boundaries, and win detection
-- [ ] Add a `test` script
-- [ ] Add component tests for the board, flagging, and difficulty switching
+- [x] Add a `test` script and a jsdom harness driving the real components
+- [ ] Add `node:test` unit tests for the model: `placeMines` determinism and exact mine count, `countNeighborMines` correctness, flood fill boundaries, win detection
+- [ ] Cover the remaining edge cases: the 1×1/1-mine board, out-of-range coordinates
 
 ## Contributing
 

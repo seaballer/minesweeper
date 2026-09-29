@@ -1,18 +1,20 @@
 import { memo } from 'react';
 import Box from '@mui/material/Box';
+import { useTheme } from '@mui/material/styles';
 import FlagIcon from '@mui/icons-material/Flag';
 import BoltIcon from '@mui/icons-material/Bolt';
 
-// Standard Minesweeper digit colors, kept for familiarity.
+// Digit colors tuned for the dark field: light enough to clear AA contrast
+// against the revealed-cell backdrop without glowing.
 const NUMBER_COLORS = {
-    1: '#1976d2',
-    2: '#2e7d32',
-    3: '#d32f2f',
-    4: '#6a1b9a',
-    5: '#8d6e63',
-    6: '#00838f',
-    7: '#455a64',
-    8: '#9e9e9e',
+    1: '#5aa9ff',
+    2: '#3ddc84',
+    3: '#ff7b72',
+    4: '#b78cff',
+    5: '#f0a02a',
+    6: '#2fd4c8',
+    7: '#e8ecf1',
+    8: '#8b96a5',
 };
 
 /**
@@ -34,32 +36,52 @@ function CellButton({
     onFlag,
     disabled,
 }) {
+    const theme = useTheme();
+
     let content = null;
     if (isVisible) {
         if (isMine) {
-            content = <BoltIcon sx={{ fontSize: 18 }} color={isExploded ? 'error' : 'inherit'} />;
+            content = <BoltIcon sx={{ fontSize: 17 }} />;
         } else if (neighborMines > 0) {
             content = neighborMines;
         }
     } else if (isFlagged) {
-        content = <FlagIcon sx={{ fontSize: 16 }} color="error" />;
+        content = <FlagIcon sx={{ fontSize: 15 }} />;
     }
 
-    // Unrevealed and flagged cells stay raised; everything else is flat.
     const raised = !isVisible;
+    // Clicking is meaningless once the board is decided, and revealed cells
+    // have nothing left to do.
+    const interactive = !disabled && raised;
+
+    const label = [
+        `Row ${row + 1} column ${col + 1}`,
+        isVisible ? (isMine ? 'mine' : neighborMines ? `${neighborMines} adjacent mines` : 'clear') : 'hidden',
+        isFlagged ? 'flagged' : '',
+    ].filter(Boolean).join(', ');
 
     return (
         <Box
             component="button"
             type="button"
-            onClick={() => onReveal(row, col)}
+            onClick={() => interactive && onReveal(row, col)}
             onContextMenu={(event) => {
-                // Right click flags, and the browser menu would otherwise show.
-                event.preventDefault();
-                onFlag(row, col);
+                // Only suppress the native menu when we actually act on it.
+                if (interactive) {
+                    event.preventDefault();
+                    onFlag(row, col);
+                }
+            }}
+            onKeyDown={(event) => {
+                // 'f' is the keyboard equivalent of right-click, so the game is
+                // playable without a mouse.
+                if (interactive && (event.key === 'f' || event.key === 'F')) {
+                    event.preventDefault();
+                    onFlag(row, col);
+                }
             }}
             disabled={disabled}
-            aria-label={`Row ${row + 1} column ${col + 1}${isMine ? ', mine' : ''}${isFlagged ? ', flagged' : ''}`}
+            aria-label={label}
             sx={{
                 width: 30,
                 height: 30,
@@ -67,34 +89,62 @@ function CellButton({
                 alignItems: 'center',
                 justifyContent: 'center',
                 p: 0,
-                border: '1px solid',
-                borderColor: raised ? 'divider' : 'transparent',
-                borderRadius: '4px',
-                cursor: disabled ? 'default' : 'pointer',
+                border: 'none',
+                borderRadius: '5px',
+                cursor: interactive ? 'pointer' : 'default',
+                fontFamily: theme.mono,
                 fontSize: 14,
-                fontWeight: 700,
+                fontWeight: 600,
                 userSelect: 'none',
+                // A short pop is the one moment of motion worth having: it
+                // makes a cascade of revealed cells read as a sequence.
+                transition: 'transform 90ms ease-out, background-color 140ms ease',
+                transform: raised ? 'none' : 'scale(0.96)',
                 color: isVisible && !isMine
                     ? NUMBER_COLORS[neighborMines] ?? 'text.primary'
-                    : 'text.primary',
+                    : isFlagged
+                        ? 'secondary.main'
+                        : 'text.secondary',
+
+                // Raised cells get a real key feel: a top highlight, a
+                // gradient face, and a bottom shadow. Revealed cells go flat.
+                // NOTE: the gradient must go through `backgroundImage` —
+                // `backgroundColor` only accepts a <color> and silently drops
+                // a gradient, which leaves the cell fully transparent.
                 backgroundColor: isExploded
                     ? 'error.main'
-                    : isMine && isVisible
-                        ? 'grey.300'
-                        : raised
-                            ? 'grey.100'
-                            : 'transparent',
-                '&:hover': {
-                    backgroundColor: disabled || !raised ? undefined : 'grey.200',
-                },
+                    : raised
+                        ? 'transparent'
+                        : isMine
+                            ? 'board.mineTint'
+                            : 'board.revealed',
+                ...(raised && {
+                    backgroundImage: `linear-gradient(180deg, ${theme.board.keyTop} 0%, ${theme.board.keyBottom} 100%)`,
+                }),
+                boxShadow: isExploded
+                    ? 'inset 0 0 0 1px rgba(255,255,255,0.25)'
+                    : raised
+                        ? 'inset 0 1px 0 rgba(255,255,255,0.07), 0 2px 0 rgba(0,0,0,0.35)'
+                        : 'none',
+
+                ...(interactive && {
+                    '&:hover': {
+                        backgroundImage: `linear-gradient(180deg, ${theme.board.keyHoverTop} 0%, ${theme.board.keyHoverBottom} 100%)`,
+                    },
+                }),
+                '&:active': interactive ? { transform: 'translateY(1px)' } : {},
                 '&:focus-visible': {
                     outline: '2px solid',
                     outlineColor: 'primary.main',
-                    outlineOffset: '-2px',
+                    outlineOffset: '2px',
                 },
             }}
         >
-            {content}
+            {isMine && isVisible ? (
+                <Box sx={{ color: isExploded ? '#fff' : 'error.main', display: 'flex' }}>
+                    {content}
+                </Box>
+            ) : content}
         </Box>
     );
 }

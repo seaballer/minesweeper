@@ -63,12 +63,17 @@ export function useMinesweeper(initialDifficulty = DEFAULT_DIFFICULTY) {
 
     const minesRemaining = Math.max(0, grid.mineCount - flagsPlaced);
 
+    // Distinct from minesRemaining === 0: over-flagging also drives the
+    // remainder to zero, but that's a wrong answer, not a solved board.
+    const allMinesFlagged = flagsPlaced === grid.mineCount;
+
     return {
         grid,
         difficulty: DIFFICULTIES[difficultyKey],
         status: grid.status,
         isOver,
         minesRemaining,
+        allMinesFlagged,
         reveal,
         toggleFlag,
         reset,
