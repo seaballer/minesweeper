@@ -1,10 +1,30 @@
 import { Cell } from './Cell.js';
 
+// Small, fast, well-distributed 32-bit PRNG. Returns a function producing
+// floats in [0, 1). Used so a given seed always yields the same board.
+function mulberry32(seed) {
+    let a = seed >>> 0;
+
+    return function () {
+        a |= 0;
+        a = (a + 0x6D2B79F5) | 0;
+        let t = Math.imul(a ^ (a >>> 15), 1 | a);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+}
+
+// Default seeds come from the clock, but bumped per instantiation: Date.now()
+// alone is millisecond-resolution, so grids built in the same tick would
+// collide and produce identical boards.
+let nextSeed = Date.now();
+
 export class Grid {
-    constructor(rows, cols, mineCount) {
+    constructor(rows, cols, mineCount, seed) {
         this.rows = rows;
         this.cols = cols;
         this.mineCount = mineCount;
+        this.seed = seed ?? nextSeed++;
         this.remainingSafeCells = rows * cols - mineCount;
         this.cells = this.createGrid();
     }
@@ -25,17 +45,28 @@ export class Grid {
         return grid;
     }
 
-    placeMines() { // could redo with shuffle method later
-        let placedMines = 0;
-
-        while (placedMines < this.mineCount) {
-            const row = Math.floor(Math.random() * this.rows);
-            const col = Math.floor(Math.random() * this.cols);
-
-            if (!this.cells[row][col].isMine) {
-                this.cells[row][col].placeMine();
-                placedMines++;
+    placeMines() {
+        // Build a flat list of every cell, shuffle it with Fisher-Yates, then
+        // take the first mineCount entries. The first `mineCount` cells of a
+        // uniform shuffle are a uniform sample, so this matches the old
+        // rejection-sampling distribution without the retry loop.
+        const positions = [];
+        for (let i = 0; i < this.rows; i++) {
+            for (let j = 0; j < this.cols; j++) {
+                positions.push(i * this.cols + j);
             }
+        }
+
+        const random = mulberry32(this.seed);
+
+        for (let i = positions.length - 1; i > 0; i--) {
+            const j = Math.floor(random() * (i + 1));
+            [positions[i], positions[j]] = [positions[j], positions[i]];
+        }
+
+        for (let i = 0; i < this.mineCount; i++) {
+            const position = positions[i];
+            this.cells[Math.floor(position / this.cols)][position % this.cols].placeMine();
         }
     }
 
