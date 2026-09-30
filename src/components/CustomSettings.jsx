@@ -32,17 +32,23 @@ export default function CustomSettings({ value, onApply }) {
         // literal text "undefined" in the field.
         seed: value.seed === undefined ? '' : String(value.seed),
     });
+    // The seed is a genuinely optional extra, so it gets a checkbox rather than
+    // a field that is always sitting there implying you should fill it in. The
+    // text is kept even while the box is unchecked, so toggling it off and on
+    // again does not throw the seed away.
+    const [seedEnabled, setSeedEnabled] = useState(value.seed !== undefined);
 
-    const preview = resolveCustom(draft, value);
+    // An unchecked box means "no seed", and that goes through the same sanitize
+    // path as any other input rather than being special-cased at the call site.
+    const preview = resolveCustom({ ...draft, seed: seedEnabled ? draft.seed : '' }, value);
     // Compare resolved values, not the raw strings: typing "016" against an
     // applied "16" is not a change, and Enter would otherwise re-apply
     // the same board.
-    const draftSeed = draft.seed.trim() === '' ? undefined : Number.parseInt(draft.seed, 10);
     const dirty =
         preview.rows !== value.rows ||
         preview.cols !== value.cols ||
         preview.mineCount !== value.mineCount ||
-        draftSeed !== value.seed;
+        preview.seed !== value.seed;
 
     // A plain object style, so Emotion can't be relied on for vendor or
     // pseudo-element selectors here. `CSS-in-JS-with-@` would allow nesting,
@@ -72,7 +78,7 @@ export default function CustomSettings({ value, onApply }) {
         }
     `;
 
-    const field = (name, label, min, max, optional = false) => (
+    const field = (name, label, min, max) => (
         <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             <Typography variant="caption" color="text.secondary">
                 {label}
@@ -99,9 +105,7 @@ export default function CustomSettings({ value, onApply }) {
                             setDraft((d) => ({ ...d, [name]: String(max) }));
                             return;
                         }
-                        // The seed may legitimately be left blank, which is
-                        // "random board", so it is not snapped up to a minimum.
-                        if (min !== undefined && parsed < min && !optional) {
+                        if (min !== undefined && parsed < min) {
                             setDraft((d) => ({ ...d, [name]: String(min) }));
                             return;
                         }
@@ -144,12 +148,36 @@ export default function CustomSettings({ value, onApply }) {
     // needs one safe cell, or the first click can never be safe.
     const maxMines = Math.max(CUSTOM_LIMITS.minMines, preview.rows * preview.cols - 1);
 
-    // Seed is optional: blank means a random board that changes on reset.
-    // A value pins the layout, so the same board can be shared and replayed.
-    const seedPreview = draft.seed.trim() === '' ? undefined : Number.parseInt(draft.seed, 10);
-    const seedValid =
-        draft.seed.trim() === '' ||
-        (Number.isInteger(seedPreview) && seedPreview >= CUSTOM_LIMITS.minSeed);
+    // Free text, so none of the numeric machinery applies: no spinners, no
+    // clamping to a maximum, no wheel stepping. It is wider because words are
+    // longer than digits and there is nothing to align against.
+    const seedField = (
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <Typography variant="caption" color="text.secondary">
+                Seed
+            </Typography>
+            <input
+                type="text"
+                value={draft.seed}
+                aria-label="Seed"
+                className="custom-input"
+                placeholder="any text"
+                autoComplete="off"
+                spellCheck="false"
+                onChange={(e) => {
+                    const raw = e.target.value;
+                    setDraft((d) => ({ ...d, seed: raw }));
+                }}
+                onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        onApply(preview);
+                    }
+                }}
+                style={{ ...inputStyle, width: 132 }}
+            />
+        </label>
+    );
 
     return (
         <Box
@@ -171,13 +199,48 @@ export default function CustomSettings({ value, onApply }) {
             {field('rows', 'Rows', CUSTOM_LIMITS.minRows, CUSTOM_LIMITS.maxRows)}
             {field('cols', 'Cols', CUSTOM_LIMITS.minCols, CUSTOM_LIMITS.maxCols)}
             {field('mineCount', 'Mines', CUSTOM_LIMITS.minMines, maxMines)}
-            {field('seed', 'Seed', CUSTOM_LIMITS.minSeed, CUSTOM_LIMITS.maxSeed, true)}
+
+            {/* A plain checkbox, for the same reason as the plain inputs above:
+                the box is a single control and MUI's Checkbox would drag in the
+                SwitchBase family for it. `accentColor` themes the tick without
+                any of that. */}
+            <label
+                style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    // Nudged up so the box sits on the input row rather than on
+                    // the caption row, since the container aligns to the end.
+                    paddingBottom: 8,
+                    cursor: 'pointer',
+                    userSelect: 'none',
+                }}
+            >
+                <input
+                    type="checkbox"
+                    checked={seedEnabled}
+                    onChange={(e) => setSeedEnabled(e.target.checked)}
+                    aria-label="Seed?"
+                    style={{
+                        accentColor: theme.palette.primary.main,
+                        width: 15,
+                        height: 15,
+                        margin: 0,
+                        cursor: 'pointer',
+                    }}
+                />
+                <Typography variant="caption" color="text.secondary">
+                    Seed?
+                </Typography>
+            </label>
+
+            {seedEnabled && seedField}
 
             <Button
                 size="small"
                 variant="contained"
-                disabled={!dirty || !seedValid}
-                onClick={() => onApply({ ...preview, seed: seedPreview })}
+                disabled={!dirty}
+                onClick={() => onApply(preview)}
                 sx={{ minWidth: 84, textTransform: 'none' }}
             >
                 Apply
@@ -186,8 +249,7 @@ export default function CustomSettings({ value, onApply }) {
             <Typography variant="caption" color="text.secondary" sx={{ ml: 'auto', pb: 0.5 }}>
                 {preview.rows}×{preview.cols} · {preview.mineCount} mines
                 {adjusted && ' (adjusted)'}
-                {!seedValid && ' · seed must be a number'}
-                {seedPreview !== undefined && seedValid && ` · seed ${seedPreview} (pinned)`}
+                {preview.seed === undefined ? ' · random' : ` · seed "${preview.seed}" (pinned)`}
             </Typography>
         </Box>
     );

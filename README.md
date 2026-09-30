@@ -20,7 +20,7 @@ npm run dev     # http://localhost:5173
 | `npm run dev`          | Dev server with hot reload                            |
 | `npm run build`        | Production bundle into`dist/`                         |
 | `npm run preview`      | Serve the built bundle                                |
-| `npm test`             | Mounts the UI in jsdom and drives it (212 assertions) |
+| `npm test`             | Mounts the UI in jsdom and drives it (238 assertions) |
 | `npm run lint`         | ESLint,`react-hooks` rules included                   |
 | `npm run format`       | Prettier, writes in place                             |
 | `npm run format:check` | Prettier, reports only                                |
@@ -77,7 +77,7 @@ Three layers, and the boundary between them is the point:
   own.
 
 `ui-check.mjs` is the test harness. It stands up jsdom, loads `App` through Vite
-SSR so JSX compiles, and drives it with real clicks — 212 assertions, no browser.
+SSR so JSX compiles, and drives it with real clicks — 238 assertions, no browser.
 It imports `GAP`, `BOARD_CHROME`, and `CELL` from `Board.jsx` so it asserts the
 same sizing arithmetic the CSS encodes rather than a hand-copied version.
 
@@ -89,6 +89,7 @@ The seed decides what reset does:
 
 ```js
 new Grid(9, 9, 10, 1234); // pinned: this exact board, every time
+new Grid(9, 9, 10, 'hello world'); // pinned: hashed to a number first
 new Grid(9, 9, 10); // unpinned: a new board on every reset
 ```
 
@@ -208,10 +209,20 @@ Custom takes rows, columns, mines, and an optional seed, defaulting to
 most `rows × cols - 1` mines, so a board always has a safe first click. Enter or
 Apply commits it.
 
-**Seed.** Leave it blank for a random board that changes every reset. Enter a
-number to pin the layout: reset then replays exactly the same board, and anyone
-with the same seed, size, and mine count gets the identical board. The seed is
-part of the custom config, so switching to a preset and back restores it.
+**Seed.** The field sits behind a **Seed?** checkbox, because pinning a board is
+something you opt into rather than something you fill in. Tick it and type any
+text to pin the layout: reset then replays exactly the same board, and anyone
+with the same seed, size, and mine count gets the identical board. Unticking it
+and applying unpins the board again. The seed is part of the custom config, so
+switching to a preset and back restores it, checkbox and all.
+
+Text is reduced to the number the PRNG actually uses by summing each character's
+position times its character code, counting positions from 1 so the leading
+character still counts. It is deliberately plain, which has one consequence
+worth knowing: it is order-sensitive but not collision-resistant, so anagrams can
+land on the same board (`aab` and `bba` both sum to 585). Fine for
+remembering "the board called hello world", not fine for distinguishing
+near-identical phrases.
 
 ## Engineering notes
 

@@ -14,6 +14,34 @@ function mulberry32(seed) {
     };
 }
 
+/**
+ * Reduces a seed to the uint32 the PRNG consumes.
+ *
+ * A seed can be a number or a string, so a board can be pinned by something
+ * worth typing — a word, a name — rather than an integer nobody remembers by
+ * the time they want to share the board.
+ *
+ * Positions count from 1, not 0. A 0-indexed first term would make the leading
+ * character contribute nothing, so "abc" and "xbc" would land on the same board.
+ *
+ * The mix is deliberately plain, and that has a cost: it is order-sensitive but
+ * not collision-resistant, so anagrams can agree ("aab" and "bba" both sum to
+ * 585). Fine for a starting point and cheap to strengthen here if it ever
+ * matters. Note that a numeric string is hashed as text, so "4242" and 4242 are
+ * different boards; the UI only ever produces strings, so it is consistent.
+ */
+export function hashSeed(value) {
+    if (typeof value === 'number') {
+        return value >>> 0;
+    }
+
+    let hash = 0;
+    for (let i = 0; i < value.length; i += 1) {
+        hash += (i + 1) * value.charCodeAt(i);
+    }
+    return hash >>> 0;
+}
+
 // Default seeds come from the clock, but bumped per instantiation: Date.now()
 // alone is millisecond-resolution, so grids built in the same tick would
 // collide and produce identical boards.
@@ -31,9 +59,11 @@ export class Grid {
         this.mineCount = Math.max(0, Math.min(mineCount, rows * cols - 1));
         // A seed passed by the caller means "this exact board": it is pinned so
         // reset replays it and the board stays shareable. No seed means the
-        // board is random, so reset draws a new one.
+        // board is random, so reset draws a new one. `seed === undefined` is the
+        // only "no seed" — an empty string is a seed of zero, so callers
+        // normalize blanks away before they get here.
         this.pinnedSeed = seed !== undefined;
-        this.seed = seed ?? nextSeed++;
+        this.seed = seed === undefined ? nextSeed++ : hashSeed(seed);
         this.remainingSafeCells = rows * cols - this.mineCount;
         this.flagCount = 0;
         this.cells = this.createGrid();

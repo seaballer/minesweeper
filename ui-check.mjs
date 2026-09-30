@@ -42,7 +42,7 @@ const { ThemeProvider } = await import('@mui/material/styles');
 const CssBaseline = (await import('@mui/material/CssBaseline')).default;
 const App = (await vite.ssrLoadModule('/src/App.jsx')).default;
 const theme = (await vite.ssrLoadModule('/src/theme.js')).default;
-const { Grid } = await vite.ssrLoadModule('/src/game/Grid.js');
+const { Grid, hashSeed } = await vite.ssrLoadModule('/src/game/Grid.js');
 
 const errors = [];
 console.error = (...a) => {
@@ -934,6 +934,82 @@ check(
     auto.revealCell(4, 4);
     check('an unseeded board changes on reset', layout(auto) !== a);
 
+    // A text seed pins a board just as a number does, and hashes to a uint32.
+    const words = ['hello', 'goodbye', 'a longer phrase', 'Ünïcødé ✓'];
+    const wordLayouts = new Map();
+    for (const word of words) {
+        const g = new Grid(9, 9, 10, word);
+        g.initialize();
+        g.revealCell(4, 4);
+        check(`the text seed "${word}" pins the board`, g.pinnedSeed === true);
+        check(
+            `the text seed "${word}" hashes to a uint32`,
+            Number.isInteger(g.seed) && g.seed >= 0 && g.seed <= 4294967295,
+            `got ${g.seed}`
+        );
+        wordLayouts.set(word, layout(g));
+    }
+    check(
+        'different text seeds give different boards',
+        new Set(wordLayouts.values()).size === words.length,
+        `${new Set(wordLayouts.values()).size} distinct of ${words.length}`
+    );
+    // Two grids built from the same word must match, which is what makes a
+    // board shareable.
+    const same = new Grid(9, 9, 10, 'hello');
+    same.initialize();
+    same.revealCell(4, 4);
+    check('the same text seed reproduces the board', layout(same) === wordLayouts.get('hello'));
+
+    // A text seed survives reset unchanged, exactly like a numeric one.
+    let wordsStable = true;
+    const wordy = new Grid(9, 9, 10, 'hello');
+    wordy.initialize();
+    wordy.revealCell(4, 4);
+    const wordFirst = layout(wordy);
+    for (let i = 0; i < 10; i++) {
+        wordy.initialize();
+        wordy.revealCell(4, 4);
+        if (layout(wordy) !== wordFirst) wordsStable = false;
+    }
+    check('a text-seeded board survives reset unchanged', wordsStable);
+
+    // Position counting from 1 is what stops the leading character being
+    // ignored: a 0-indexed sum gives "abc" and "xbc" the same board.
+    const abc = new Grid(9, 9, 10, 'abc');
+    const xbc = new Grid(9, 9, 10, 'xbc');
+    abc.initialize();
+    xbc.initialize();
+    check(
+        'a seed that differs only in its first character differs',
+        abc.seed !== xbc.seed,
+        `${abc.seed} vs ${xbc.seed}`
+    );
+
+    // Pin the formula itself: sum of (1-based position * char code). 'ab' is
+    // 1*97 + 2*98. If this ever changes, boards shared under an old seed stop
+    // reproducing, so the number belongs in a test rather than only a comment.
+    check(
+        'the seed hash is position times char code',
+        hashSeed('ab') === 1 * 97 + 2 * 98,
+        `${hashSeed('ab')}`
+    );
+    check('the seed hash is order-sensitive', hashSeed('ab') !== hashSeed('ba'));
+    check('a numeric seed passes through unchanged', hashSeed(4242) === 4242, `${hashSeed(4242)}`);
+    check(
+        'a negative numeric seed wraps to uint32',
+        hashSeed(-1) === 4294967295,
+        `${hashSeed(-1)}`
+    );
+    // Documented limitation rather than a bug: the mix is not collision
+    // resistant, so anagrams can agree. Worth knowing before anyone relies on
+    // seeds distinguishing near-identical phrases.
+    check(
+        'anagram collision is a known property of this hash',
+        hashSeed('aab') === hashSeed('bba'),
+        `${hashSeed('aab')} vs ${hashSeed('bba')}`
+    );
+
     const seen = new Set();
     for (let i = 0; i < 60; i++) {
         auto.initialize();
@@ -1229,32 +1305,52 @@ check(
 // --- Seed input in the custom panel ---
 {
     await act(async () => {
-        $$('button')
-            .find((b) => b.textContent.trim() === 'Custom')
-            .click();
+        byText('Custom').click();
     });
     check(
-        'the custom panel is open with a seed field',
-        $$('input[type="number"]').length === 4,
+        'the custom panel has three numeric fields',
+        $$('input[type="number"]').length === 3,
         `${$$('input[type="number"]').length} fields`
     );
+
+    // The seed is optional, so it hides behind a checkbox rather than sitting
+    // there implying it should be filled in.
+    const seedBox = $('input[type="checkbox"]');
+    check('there is a Seed? checkbox', !!seedBox);
+    check('the Seed? checkbox is labelled', seedBox?.getAttribute('aria-label') === 'Seed?');
+    check('the seed field is hidden by default', !$('input[type="text"]'));
+
+    await act(async () => {
+        seedBox.click();
+    });
+    const seedInput = $('input[type="text"]');
+    check('checking Seed? reveals the seed field', !!seedInput);
+    check(
+        'the seed field takes text, not a number',
+        seedInput?.getAttribute('type') === 'text',
+        seedInput?.getAttribute('type')
+    );
+    check('the seed field starts blank', seedInput?.value === '', `"${seedInput?.value}"`);
 
     // Set an explicit size so this block does not depend on whatever custom
     // config an earlier test left applied -- the panel correctly remembers it.
     const nums = $$('input[type="number"]');
-    check('the seed field starts blank', nums[3]?.value === '', `"${nums[3]?.value}"`);
     await act(async () => {
         setNative(nums[0], '6');
         setNative(nums[1], '7');
         setNative(nums[2], '5');
-        setNative(nums[3], '4242');
+        setNative(seedInput, 'hello world');
     });
     await act(async () => {
-        $$('button')
-            .find((b) => b.textContent.trim() === 'Apply')
-            .click();
+        byText('Apply').click();
     });
     check('a 6x7/5 custom board applied', counter() === '005', `got "${counter()}"`);
+    const caption = () => document.body.textContent.match(/·[^·]*$/)?.[0]?.trim() ?? '(none)';
+    check(
+        'the applied seed reads back as text',
+        /seed "hello world" \(pinned\)/.test(document.body.textContent),
+        caption()
+    );
 
     // Mines only appear in the labels once the board is finished, so play each
     // board out before reading the layout off it.
@@ -1283,17 +1379,44 @@ check(
 
     const seeded = await playOut();
     check(
-        'a seeded board is fully revealed at game over',
+        'a text-seeded board is fully revealed at game over',
         seeded.split('').filter((x) => x === '1').length === 5,
         `${seeded.split('').filter((x) => x === '1').length} mines exposed`
     );
     const replayed = await playOut();
-    check('a seeded board replays through the UI', replayed === seeded);
+    check('a text-seeded board replays through the UI', replayed === seeded);
+
+    // The seed lives in the applied config, so it survives leaving Custom and
+    // coming back -- the panel is keyed on that config.
+    await act(async () => {
+        byText('Beginner').click();
+    });
+    await act(async () => {
+        byText('Custom').click();
+    });
+    check(
+        'the seed survives a round trip through another difficulty',
+        $('input[type="text"]')?.value === 'hello world' &&
+            $('input[type="checkbox"]')?.checked === true,
+        `field="${$('input[type="text"]')?.value}" checked=${$('input[type="checkbox"]')?.checked}`
+    );
+
+    // Unchecking has to unpin, or the box would be decoration.
+    await act(async () => {
+        $('input[type="checkbox"]').click();
+    });
+    check('unchecking hides the seed field again', !$('input[type="text"]'));
+    await act(async () => {
+        byText('Apply').click();
+    });
+    check(
+        'unchecking Seed? unpins the board',
+        /· random/.test(document.body.textContent),
+        caption()
+    );
 
     await act(async () => {
-        $$('button')
-            .find((b) => b.textContent.trim() === 'Beginner')
-            .click();
+        byText('Beginner').click();
     });
 }
 
@@ -1495,8 +1618,8 @@ check(
 }
 
 const numFields = $$('input[type="number"]');
-// rows, cols, mines, seed.
-check('four numeric fields exist', numFields.length === 4, `${numFields.length} found`);
+// rows, cols, mines. The seed is free text and sits behind a checkbox.
+check('three numeric fields exist', numFields.length === 3, `${numFields.length} found`);
 await act(async () => {
     setNative(numFields[0], '5');
 });

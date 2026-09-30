@@ -25,10 +25,6 @@ export const CUSTOM_LIMITS = {
     minCols: 2,
     maxCols: 30,
     minMines: 1,
-    // Seeds are pinned through mulberry32, which coerces to uint32, so any
-    // non-negative integer up to 2^32-1 is meaningful and reproducible.
-    minSeed: 0,
-    maxSeed: 4294967295,
 };
 
 export const DEFAULT_CUSTOM = { rows: 12, cols: 14, mineCount: 25 };
@@ -62,5 +58,14 @@ export function resolveCustom(input, previous = DEFAULT_CUSTOM) {
         previous.mineCount
     );
 
-    return { rows, cols, mineCount };
+    // The seed is free text, not a number, and it is genuinely optional: the
+    // panel only offers the field when it is asked for. Blank or whitespace
+    // means "no seed", which is a random board — it does not fall back to the
+    // previous seed, because clearing the field is how you unpin a board.
+    // Trimming means surrounding whitespace does not make two seeds differ.
+    const trimmed =
+        input.seed === undefined || input.seed === null ? '' : String(input.seed).trim();
+    const seed = trimmed === '' ? undefined : trimmed;
+
+    return { rows, cols, mineCount, seed };
 }

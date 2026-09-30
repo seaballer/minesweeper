@@ -9,7 +9,7 @@ testable outside a browser.
 - `npm run dev` — Vite dev server on <http://localhost:5173>
 - `npm run build` — production bundle into `dist/`
 - `npm run preview` — serve the built bundle
-- `npm test` — mounts the components in jsdom and drives them (212 assertions)
+- `npm test` — mounts the components in jsdom and drives them (238 assertions)
 - `npm run lint` — ESLint (`react-hooks` rules included). Must be clean before committing.
 - `npm run format` / `npm run format:check` — Prettier. The config matches the
   existing style: 4-space indent, single quotes, 100 columns.
@@ -33,7 +33,7 @@ testable outside a browser.
 - `src/game/difficulties.js` — board size presets plus `resolveCustom()`, which sanitizes player-entered sizes. The fallback path is clamped too, not returned verbatim: a cleared Mines field would otherwise fall back to the previous board's count and produce an unwinnable board.
 - `src/components/` — presentational only. `Board`, `CellButton`, `ControlBar`, `DifficultySelect`, `ControlsInfo`, `StatusBanner`, `Timer`, `CustomSettings`, `MineIcon`. They receive data and callbacks as props and hold no game state.
 - `src/hooks/useResetShortcut.js` — document-level `R` to reset. Takes a `suspended` flag: `App` passes the controls-dialog state, because the dialog is where `R` is documented and it must not wipe a live game while it is open.
-- `CustomSettings.jsx` uses plain `<input>`s and one inline `<style>`, not MUI's `TextField`. `TextField` pulls in the FormControl/InputLabel/OutlinedInput family, which cost ~80kB for three numeric fields. Emotion can't express vendor pseudo-elements in a plain style object, hence the stylesheet tag.
+- `CustomSettings.jsx` uses plain `<input>`s and one inline `<style>`, not MUI's `TextField`. `TextField` pulls in the FormControl/InputLabel/OutlinedInput family, which cost ~80kB for three numeric fields. Emotion can't express vendor pseudo-elements in a plain style object, hence the stylesheet tag. The `Seed?` checkbox is plain for the same reason: MUI's `Checkbox` would drag in the SwitchBase family for one control. `accentColor` themes the tick instead.
 
 ## Custom board inputs
 
@@ -49,6 +49,24 @@ value isn't clamped out from under the cursor. Two behaviours are deliberate:
 
 `maxMines` is computed from the current rows/cols rather than read from
 `CUSTOM_LIMITS`, because a board always needs one safe cell.
+
+**The seed is behind a `Seed?` checkbox**, not a fourth field. Pinning a board is
+something you opt into, and a permanently visible field reads as "fill me in".
+Three things about it are deliberate:
+
+- **Unchecked passes `seed: ''` into `resolveCustom`**, so "no seed" travels the
+  same sanitize path as any other input instead of being special-cased at the
+  call site. It resolves to `undefined`, which is the only value that unpins.
+- **Unticking the box and applying unpins the board.** The draft text is kept
+  while unchecked, so toggling off and on again does not throw the seed away —
+  but applying while unticked does clear it, which is the only way to unpin.
+- **The seed field skips all the numeric machinery** in the shared `field()`
+  helper: no spinners, no max clamp, no wheel stepping, and it is wider. It has
+  its own renderer for that reason, and the `optional` parameter that used to
+  exist on `field()` only ever served the old numeric seed, so it is gone.
+
+`seedEnabled` initializes from `value.seed !== undefined`, which is what makes
+the checkbox correct after leaving Custom for a preset and coming back.
 
 ## Board sizing
 
@@ -228,6 +246,9 @@ An empty string means the value was rejected. `npm test` asserts this too.
 - The constructor allocates cells and `initialize()` resets them, but **neither places mines**. Placement is deferred to the first `revealCell` via `ensureMinesPlaced`, so the opening click is always safe. Until then the board has no mines and all `neighborMines` are 0.
 - `revealCell(row, col)` **always returns a status string** (`ready` / `playing` / `win` / `gameover`) and never `undefined`. A no-op — already-visible or flagged cell — returns the current status, because the board is unchanged. `chord` follows the same rule.
 - Seeds: a seed passed to the constructor is **pinned**, so `initialize()` replays that exact board. No seed means unpinned, and `initialize()` advances it, so reset yields a new board. Don't "simplify" this into one seed field — resetting a pinned grid is what makes a board shareable.
+- A seed may be a **number or a string**. `hashSeed` reduces one to the uint32 `mulberry32` consumes, summing each character's 1-based position times its char code. Positions start at 1 deliberately: a 0-indexed first term would make the leading character contribute nothing, so `"abc"` and `"xbc"` would share a board. `npm test` pins the formula (`hashSeed('ab') === 1*97 + 2*98`) because changing it silently invalidates every board shared under an old seed.
+- The hash is **order-sensitive but not collision-resistant**, so anagrams agree — `aab` and `bba` both sum to 585. Documented in the README and asserted as a known property, so it reads as a decision rather than a surprise.
+- Only `seed === undefined` means unpinned. An empty string is a _valid_ seed of 0, so `resolveCustom` normalizes blanks to `undefined` before they reach `Grid`. The hook's equality check in `applyCustomSize` compares seed strings, so changing one rebuilds the board.
 - `grid.status` is `"ready" | "playing" | "win" | "gameover"`. Once `win` or `gameover`, the game is terminal: further `revealCell` calls return that status and don't change the board.
 - Flood fill skips flagged and mined cells, and doesn't expand through them.
 - The constructor clamps `mineCount` to `rows * cols - 1`, always leaving one safe cell. Mines are placed on the first click with that cell excluded, so a board needing every cell to be a mine has nowhere safe to open and is unwinnable before it starts. A 1×1 board asking for 1 mine becomes 1×1 with none, and wins immediately.

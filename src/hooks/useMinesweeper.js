@@ -21,7 +21,7 @@ import { useTimer } from './useTimer.js';
 export function useMinesweeper(initialDifficulty = DEFAULT_DIFFICULTY) {
     const [difficultyKey, setDifficultyKey] = useState(initialDifficulty);
     // Only meaningful for the `custom` difficulty; presets read from DIFFICULTIES.
-    // `seed` is undefined for a random board, or a number that pins the layout
+    // `seed` is undefined for a random board, or free text that pins the layout
     // so it can be shared and replayed.
     const [customSize, setCustomSize] = useState(DEFAULT_CUSTOM);
     const [version, setVersion] = useState(0);
