@@ -105,10 +105,14 @@ check('first click is not a mine', !/, mine\b/.test(cells()[40].getAttribute('ar
 const lbl = cells()[40].getAttribute('aria-label') || '';
 check('aria-label describes state', /Row 5 column 5/.test(lbl) && !/hidden/.test(lbl), lbl);
 
-// Flag
-const hidden = cells().find((c) => c.textContent.trim() === '' && !c.disabled);
+// Flag. Select via the aria-label, which encodes "hidden": a flood-filled
+// zero cell is visible but renders no text, so matching on empty textContent
+// can pick a revealed cell — and right-clicking one correctly does nothing.
+const hidden = cells().find((c) => /hidden/.test(c.getAttribute('aria-label') || ''));
+check('found a hidden cell to flag', !!hidden, hidden?.getAttribute('aria-label'));
 await act(async () => { hidden.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true })); });
-check('right click flags', $$('#minefield .MuiSvgIcon-root').length >= 1);
+check('right click flags', /flagged/.test(hidden.getAttribute('aria-label') || ''),
+    hidden.getAttribute('aria-label'));
 check('flagged cell stays hidden', hidden.textContent.trim() === '');
 check('counter decrements', counter() === '009', `got "${counter()}"`);
 
@@ -152,7 +156,8 @@ check('input disabled at end', cells().every((c) => c.disabled));
 
 // Keyboard path to flag: 'f' must work, since right-click needs a mouse.
 await act(async () => { byText('Reset').click(); });
-const kbTarget = cells().find((c) => c.textContent.trim() === '' && !c.disabled);
+// Same reason as above: pick a genuinely hidden cell, not an empty-looking one.
+const kbTarget = cells().find((c) => /hidden/.test(c.getAttribute('aria-label') || ''));
 kbTarget.focus();
 await act(async () => {
     kbTarget.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'f', bubbles: true }));
@@ -273,6 +278,187 @@ check('mine counter has a mine icon', (counterParent?.querySelectorAll('svg').le
     `${counterParent?.querySelectorAll('svg').length} svg beside the counter`);
 check('mine icon sits left of the digits',
     counterParent?.firstElementChild?.tagName.toLowerCase() === 'svg');
+
+// --- Detonation marks the whole connected mine cluster ---
+// The reported bug: chording detonated one mine while its adjacent mine stayed
+// grey, so the board implied the neighbours were safe.
+{
+    const g = new Grid(5, 5, 4, 1);
+    g.initialize();
+    [[2, 2], [2, 3]].forEach(([r, c]) => g.cells[r][c].placeMine());
+    g.cells[0][0].placeMine();
+    g.countNeighborMines();
+    g.minesPlaced = true;
+    // Flag a safe neighbour and one real mine, so the counts match while the
+    // other real mine is left unflagged: the chord opens it.
+    g.cells[1][2].reveal();
+    g.cells[1][1].toggleFlag();
+    g.cells[2][2].toggleFlag();
+    g.chord(1, 2);
+    check('chording detonates', g.status === 'gameover', g.status);
+    check('detonated mine is marked', g.cells[2][3].isExploded);
+    check('ADJACENT mine is also marked', g.cells[2][2].isExploded, 'this is the reported bug');
+    check('unrelated mine is not marked', !g.cells[0][0].isExploded);
+}
+
+// A win marks nothing, and a lone mine marks only itself.
+{
+    const w = new Grid(2, 2, 1, 1);
+    w.revealCell(0, 0);
+    check('a win marks no mines as exploded', w.cells.flat().every((c) => !c.isExploded));
+}
+{
+    const s = new Grid(5, 5, 1, 1);
+    s.initialize();
+    s.cells[2][2].placeMine();
+    s.countNeighborMines();
+    s.minesPlaced = true;
+    s.revealAllMines(2, 2);
+    check('a lone mine marks exactly one cell', s.cells.flat().filter((c) => c.isExploded).length === 1);
+}
+{
+    // A chain of touching mines must all be marked.
+    const c = new Grid(7, 7, 6, 1);
+    c.initialize();
+    for (let i = 0; i < 6; i++) c.cells[3][i].placeMine();
+    c.countNeighborMines();
+    c.minesPlaced = true;
+    c.revealAllMines(3, 2);
+    check('a chain of 6 marks all 6', c.cells.flat().filter((x) => x.isExploded).length === 6,
+        `${c.cells.flat().filter((x) => x.isExploded).length} marked`);
+}
+
+// --- Custom difficulty: pure config logic ---
+const { resolveCustom, DEFAULT_CUSTOM } = await vite.ssrLoadModule('/src/game/difficulties.js');
+check('resolveCustom parses numeric strings',
+    resolveCustom({ rows: '12', cols: '14', mineCount: '25' }).rows === 12);
+check('resolveCustom falls back on junk input',
+    JSON.stringify(resolveCustom({ rows: 'abc', cols: '', mineCount: '' })) === JSON.stringify(DEFAULT_CUSTOM));
+check('resolveCustom clamps oversized input',
+    resolveCustom({ rows: 999, cols: 999, mineCount: 9999 }).rows === 30);
+check('resolveCustom always leaves a safe first cell',
+    resolveCustom({ rows: 2, cols: 2, mineCount: 99 }).mineCount === 3,
+    `${resolveCustom({ rows: 2, cols: 2, mineCount: 99 }).mineCount}`);
+// The mixed case that actually broke: a cleared Mines field fell back to the
+// previous 25 without clamping, giving a 2x2 board with more mines than cells.
+check('resolveCustom clamps the fallback too',
+    resolveCustom({ rows: 2, cols: 2, mineCount: '' }, DEFAULT_CUSTOM).mineCount === 3,
+    JSON.stringify(resolveCustom({ rows: 2, cols: 2, mineCount: '' }, DEFAULT_CUSTOM)));
+check('custom board minimum is 2x2 (1x1 cannot be won)',
+    resolveCustom({ rows: 1, cols: 1, mineCount: 1 }).rows === 2
+    && resolveCustom({ rows: 1, cols: 1, mineCount: 1 }).cols === 2,
+    JSON.stringify(resolveCustom({ rows: 1, cols: 1, mineCount: 1 })));
+check('resolveCustom honours the previous value',
+    resolveCustom({}, { rows: 7, cols: 8, mineCount: 9 }).rows === 7);
+// No combination of input may produce an unwinnable board.
+{
+    let allSafe = true;
+    for (const rows of [2, 3, 5, 9]) {
+        for (const cols of [2, 4, 9]) {
+            for (const mc of ['', '0', '1', '999', 'abc', 3]) {
+                const r = resolveCustom({ rows, cols, mineCount: mc });
+                if (r.mineCount >= r.rows * r.cols) allSafe = false;
+            }
+        }
+    }
+    check('no input combination yields a fully-mined board', allSafe);
+}
+
+// --- Custom difficulty: the UI ---
+check('custom difficulty is offered', $$('button').some((b) => b.textContent.trim() === 'Custom'));
+await act(async () => { $$('button').find((b) => b.textContent.trim() === 'Custom').click(); });
+check('custom settings appear', /Rows/.test(document.body.textContent) && /Mines/.test(document.body.textContent));
+check('custom board uses the default size', cells().length === DEFAULT_CUSTOM.rows * DEFAULT_CUSTOM.cols,
+    `${cells().length} cells`);
+
+const numFields = $$('input[type="number"]');
+check('three numeric fields exist', numFields.length === 3, `${numFields.length} found`);
+const setNative = (el, value) => {
+    const setter = Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value').set;
+    setter.call(el, value);
+    el.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+};
+await act(async () => { setNative(numFields[0], '5'); });
+await act(async () => { setNative(numFields[1], '6'); });
+await act(async () => { setNative(numFields[2], '7'); });
+const applyBtn = $$('button').find((b) => b.textContent.trim() === 'Apply');
+check('apply is enabled once the draft changes', !!applyBtn && !applyBtn.disabled);
+await act(async () => { applyBtn.click(); });
+check('custom size applies to the board', cells().length === 30, `${cells().length} cells (expect 5x6)`);
+check('custom mine count shows in the counter', counter() === '007', `got "${counter()}"`);
+
+// Switching back to a preset restores a fixed board.
+await act(async () => { $$('button').find((b) => b.textContent.trim() === 'Beginner').click(); });
+check('preset overrides custom size', cells().length === 81, `${cells().length} cells`);
+
+// --- Timer ---
+check('timer renders', !!$('[role="timer"]'), 'no [role=timer] found');
+check('timer starts at 0:00', $('[role="timer"]')?.textContent === '0:00', $('[role="timer"]')?.textContent);
+check('timer does not run before the first click', $('[role="timer"]')?.textContent === '0:00');
+check('timer is labelled', /elapsed time/i.test($('[role="timer"]')?.getAttribute('aria-label') || ''));
+check('timer is not a chatty live region', $('[role="timer"]')?.getAttribute('aria-live') === 'off');
+
+const { formatTime } = await vite.ssrLoadModule('/src/hooks/useTimer.js');
+check('formatTime(0)', formatTime(0) === '0:00');
+check('formatTime(9) pads seconds', formatTime(9) === '0:09');
+check('formatTime(65)', formatTime(65) === '1:05');
+check('formatTime(600)', formatTime(600) === '10:00');
+
+await act(async () => { cells()[40].click(); });
+check('timer still 0:00 right after the first click', $('[role="timer"]')?.textContent === '0:00',
+    $('[role="timer"]')?.textContent);
+
+// The reset bug only shows once the clock has actually advanced, so run a fake
+// clock whose offset is moved forward between ticks. A constant offset would
+// cancel out against a clock started while it was active.
+const realNow = Date.now;
+let offset = 0;
+Date.now = () => realNow() + offset;
+const advance = async (ms) => {
+    offset += ms;
+    await act(async () => { await new Promise((r) => setTimeout(r, 300)); });
+};
+try {
+    // The board is already mid-game from the click above.
+    await advance(65_000);
+    check('timer advances while playing', $('[role="timer"]')?.textContent === '1:05',
+        $('[role="timer"]')?.textContent);
+
+    await act(async () => { byText('Reset').click(); });
+    check('reset zeroes an advanced timer', $('[role="timer"]')?.textContent === '0:00',
+        `got "${$('[role="timer"]')?.textContent}"`);
+
+    // A new game must start from zero and count again, not inherit the old time.
+    await act(async () => { cells()[40].click(); });
+    await advance(65_000);
+    check('second game advances again', $('[role="timer"]')?.textContent === '1:05',
+        $('[role="timer"]')?.textContent);
+
+    // Switching difficulty is a new game too.
+    await act(async () => { $$('button').find((b) => b.textContent.trim() === 'Intermediate').click(); });
+    check('difficulty switch zeroes the timer', $('[role="timer"]')?.textContent === '0:00',
+        `got "${$('[role="timer"]')?.textContent}"`);
+
+    // The clock must stop the moment the game is decided. Play a board out so
+    // game over is guaranteed rather than hoping cell 0 is a mine.
+    await act(async () => { byText('Reset').click(); });
+    await act(async () => { cells()[40].click(); });
+    for (let i = 0; i < 256; i++) {
+        const c = cells()[i];
+        if (c.disabled) break;
+        await act(async () => { c.click(); });
+        if (($('[role="status"][aria-live]')?.textContent || '').length > 0) break;
+    }
+    const over = ($('[role="status"][aria-live]')?.textContent || '');
+    check('board reached a conclusion for the timer test', over.length > 0, over);
+    await advance(5_000);
+    const decided = $('[role="timer"]')?.textContent;
+    await advance(30_000);
+    check('clock stops when the game is decided',
+        $('[role="timer"]')?.textContent === decided, `held at ${decided}`);
+} finally {
+    Date.now = realNow;
+}
 
 const real = errors.filter((e) => !/act\(|useLayoutEffect|deprecat/i.test(e));
 check('no react warnings', real.length === 0, real.slice(0, 2).join(' | '));

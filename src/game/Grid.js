@@ -221,18 +221,55 @@ export class Grid {
     }
 
     // Uncovers every mine, used both on a loss and on a win so the final board
-    // is fully legible. The mine that was clicked is marked as exploded.
+    // is fully legible.
+    //
+    // On a loss the whole connected mine cluster around the detonation is
+    // marked `isExploded`, not just the single cell that was revealed. Chording
+    // in particular can uncover a mine that sits next to other mines, and
+    // showing one red cell among identical grey ones reads as if the others
+    // were safe. The spread is cluster-wide (mine -> adjacent mine -> ...)
+    // because a blast does not stop at one square.
+    //
+    // On a win no mine is detonated, so nothing is marked.
     revealAllMines(explodedRow, explodedCol) {
         for (let i = 0; i < this.rows; i++) {
             for (let j = 0; j < this.cols; j++) {
                 const cell = this.cells[i][j];
-                if (!cell.isMine) {
+                if (cell.isMine) {
+                    cell.reveal();
+                }
+            }
+        }
+
+        if (explodedRow === undefined || explodedCol === undefined) {
+            return;
+        }
+
+        const origin = this.cells[explodedRow]?.[explodedCol];
+        if (!origin?.isMine) {
+            return;
+        }
+
+        // Breadth-first walk over mine-to-mine contact. Uses an index cursor
+        // rather than shift(), matching floodFill below.
+        const seen = new Set([`${explodedRow},${explodedCol}`]);
+        const queue = [[explodedRow, explodedCol]];
+        let head = 0;
+
+        while (head < queue.length) {
+            const [currentRow, currentCol] = queue[head++];
+            this.cells[currentRow][currentCol].isExploded = true;
+
+            for (const n of this.getNeighbors(currentRow, currentCol)) {
+                if (!n.cell.isMine) {
                     continue;
                 }
-                cell.reveal();
-                if (i === explodedRow && j === explodedCol) {
-                    cell.isExploded = true;
+                const key = `${n.row},${n.col}`;
+                if (seen.has(key)) {
+                    continue;
                 }
+                seen.add(key);
+                queue.push([n.row, n.col]);
             }
         }
     }

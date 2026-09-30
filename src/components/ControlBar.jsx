@@ -6,13 +6,22 @@ import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import MineIcon from './MineIcon.jsx';
+import Timer from './Timer.jsx';
 import { DIFFICULTY_LIST } from '../game/difficulties.js';
 
 /**
  * Instrument readout: difficulty on the left, mine counter and reset grouped
  * on the right so the number sits next to the control that clears it.
  */
-export default function ControlBar({ minesRemaining, allMinesFlagged, difficultyKey, onDifficultyChange, onReset }) {
+export default function ControlBar({
+    minesRemaining,
+    allMinesFlagged,
+    elapsed,
+    timerRunning,
+    difficultyKey,
+    onDifficultyChange,
+    onReset,
+}) {
     const theme = useTheme();
 
     return (
@@ -85,6 +94,8 @@ export default function ControlBar({ minesRemaining, allMinesFlagged, difficulty
                         {String(minesRemaining).padStart(3, '0')}
                     </Typography>
                 </Box>
+
+                <Timer elapsed={elapsed} running={timerRunning} />
 
                 <Button
                     size="small"

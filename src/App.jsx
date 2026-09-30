@@ -6,22 +6,29 @@ import { useTheme } from '@mui/material/styles';
 import Board from './components/Board.jsx';
 import ControlBar from './components/ControlBar.jsx';
 import StatusBanner from './components/StatusBanner.jsx';
+import CustomSettings from './components/CustomSettings.jsx';
 import { useMinesweeper } from './hooks/useMinesweeper.js';
+import { CUSTOM_KEY } from './game/difficulties.js';
 
 export default function App() {
     const theme = useTheme();
     const {
         grid,
         difficulty,
+        boardSize,
+        customSize,
         status,
         isOver,
         minesRemaining,
+        elapsed,
+        timerRunning,
         reveal,
         toggleFlag,
         reset,
         changeDifficulty,
         allMinesFlagged,
         chord,
+        applyCustomSize,
     } = useMinesweeper();
 
     return (
@@ -46,7 +53,7 @@ export default function App() {
                                 letterSpacing: '0.08em',
                             }}
                         >
-                            {difficulty.rows}×{difficulty.cols} / {difficulty.mineCount} mines
+                            {boardSize.rows}×{boardSize.cols} / {boardSize.mineCount} mines
                         </Typography>
                     </Stack>
                     <Typography variant="body2">
@@ -59,10 +66,16 @@ export default function App() {
                 <ControlBar
                     minesRemaining={minesRemaining}
                     allMinesFlagged={allMinesFlagged}
+                    elapsed={elapsed}
+                    timerRunning={timerRunning}
                     difficultyKey={difficulty.key}
                     onDifficultyChange={changeDifficulty}
                     onReset={reset}
                 />
+
+                {difficulty.key === CUSTOM_KEY && (
+                    <CustomSettings value={customSize} onApply={applyCustomSize} />
+                )}
 
                 <StatusBanner status={status} />
 

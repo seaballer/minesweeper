@@ -22,11 +22,13 @@ testable outside a browser.
 - `src/theme.js` — the single source of design tokens. Palette, typography, the `board.*` surface tokens, and the `mono` font stack live here; components reference tokens instead of hex values.
 - `src/index.css` — global shell only: font import, page background, reduced-motion. Everything else is themed or `sx`.
 - `ui-check.mjs` — the `npm test` harness. jsdom + Vite SSR; no browser needed.
-- `src/hooks/useMinesweeper.js` — **the only place game state is mutated.** Owns the `Grid` instance and exposes `reveal`, `toggleFlag`, `reset`, `changeDifficulty`.
+- `src/hooks/useMinesweeper.js` — **the only place game state is mutated.** Owns the `Grid` instance and exposes `reveal`, `toggleFlag`, `chord`, `reset`, `changeDifficulty`, `applyCustomSize`.
+- `src/hooks/useTimer.js` — the game clock and `formatTime`. Time is derived from a start timestamp, not by counting ticks, so a throttled tab can't make it drift.
 - `src/game/Grid.js` — model: mine placement, flood fill, win detection. No DOM, no React.
 - `src/game/Cell.js` — single cell state. No DOM, no React.
-- `src/game/difficulties.js` — board size presets.
-- `src/components/` — presentational only. `Board`, `CellButton`, `ControlBar`, `StatusBanner`, `MineIcon`. They receive data and callbacks as props and hold no game state.
+- `src/game/difficulties.js` — board size presets plus `resolveCustom()`, which sanitizes player-entered sizes. The fallback path is clamped too, not returned verbatim: a cleared Mines field would otherwise fall back to the previous board's count and produce an unwinnable board.
+- `src/components/` — presentational only. `Board`, `CellButton`, `ControlBar`, `StatusBanner`, `Timer`, `CustomSettings`, `MineIcon`. They receive data and callbacks as props and hold no game state.
+- `CustomSettings.jsx` uses plain `<input>`s and one inline `<style>`, not MUI's `TextField`. `TextField` pulls in the FormControl/InputLabel/OutlinedInput family, which cost ~80kB for three numeric fields. Emotion can't express vendor pseudo-elements in a plain style object, hence the stylesheet tag.
 
 ## Board sizing
 
@@ -79,9 +81,10 @@ An empty string means the value was rejected. `npm test` asserts this too.
 - `revealCell(row, col)` returns `"playing" | "win" | "gameover"`, but returns **`undefined`** when the cell is already visible or is flagged. Don't assume a string back.
 - `grid.status` is `"ready" | "playing" | "win" | "gameover"`. Once `win` or `gameover`, the game is terminal: further `revealCell` calls return that status and don't change the board.
 - Flood fill skips flagged and mined cells, and doesn't expand through them.
-- On a 1×1 board with 1 mine there is no safe first cell, so the opening click loses. Unavoidable, not a bug.
+- On a 1×1 board with 1 mine there is no safe first cell, so the opening click loses. Unavoidable, not a bug — but `CUSTOM_LIMITS` starts at 2×2 so the custom UI can't produce one.
 - Out-of-range coordinates throw a raw `TypeError`; there is no bounds checking.
 - `remainingSafeCells` only decrements when `Cell.reveal()` returns `true`. Win is an exact `=== 0` check.
+- `revealAllMines(explodedRow, explodedCol)` uncovers every mine. On a loss it marks the whole **connected** mine cluster around the detonation (mine → adjacent mine → …) as `isExploded`, not just the clicked cell — after a chording detonation, one red cell among grey ones reads as if the neighbours were safe. On a win nothing is marked.
 - `chord(row, col)` reveals the hidden neighbors of a revealed number once its flagged-neighbor count matches. It no-ops on zero cells, hidden cells, mines, and mismatched flag counts, and delegates each reveal to `revealCell` so `remainingSafeCells` and flood fill stay owned by one code path. Chording is still a guess: flagging a safe cell and leaving the real mine unflagged will detonate it.
 - `placeMines` is a seeded Fisher-Yates shuffle (`mulberry32`). Pass a seed for a reproducible board. `mineCount` is clamped to `rows * cols`.
 

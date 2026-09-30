@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { Grid } from '../game/Grid.js';
-import { DEFAULT_DIFFICULTY, DIFFICULTIES } from '../game/difficulties.js';
+import { DEFAULT_CUSTOM, DEFAULT_DIFFICULTY, DIFFICULTIES } from '../game/difficulties.js';
+import { useTimer } from './useTimer.js';
 
 /**
  * Owns the game model and exposes the actions the UI needs.
@@ -16,18 +17,37 @@ import { DEFAULT_DIFFICULTY, DIFFICULTIES } from '../game/difficulties.js';
  */
 export function useMinesweeper(initialDifficulty = DEFAULT_DIFFICULTY) {
     const [difficultyKey, setDifficultyKey] = useState(initialDifficulty);
+    // Only meaningful for the `custom` difficulty; presets read from DIFFICULTIES.
+    const [customSize, setCustomSize] = useState(DEFAULT_CUSTOM);
     const [version, setVersion] = useState(0);
+    // Bumped on every new board so the timer knows to zero itself.
+    const [gameId, setGameId] = useState(0);
 
     const grid = useMemo(() => {
-        const { rows, cols, mineCount } = DIFFICULTIES[difficultyKey];
+        const preset = DIFFICULTIES[difficultyKey];
+        const { rows, cols, mineCount } = preset.isCustom ? customSize : preset;
         const instance = new Grid(rows, cols, mineCount);
         instance.initialize();
         return instance;
-    }, [difficultyKey]);
+    }, [difficultyKey, customSize]);
+
+    // The size actually in play. `difficulty` alone is not enough: the `custom`
+    // preset carries no dimensions, so reading rows/cols off it would render
+    // an empty caption.
+    const boardSize = useMemo(
+        () => ({ rows: grid.rows, cols: grid.cols, mineCount: grid.mineCount }),
+        [grid]
+    );
 
     const rerender = useCallback(() => setVersion(v => v + 1), []);
 
     const isOver = grid.status === 'win' || grid.status === 'gameover';
+
+    // The clock runs from the first reveal — the moment mines are placed and
+    // the game genuinely begins — and stops the instant it is decided. A board
+    // nobody has clicked yet is not being timed.
+    const timerRunning = grid.status !== 'ready' && !isOver;
+    const elapsed = useTimer(timerRunning, gameId);
 
     const reveal = useCallback((row, col) => {
         if (grid.status === 'win' || grid.status === 'gameover') {
@@ -55,13 +75,29 @@ export function useMinesweeper(initialDifficulty = DEFAULT_DIFFICULTY) {
 
     const reset = useCallback(() => {
         grid.initialize();
+        setGameId(id => id + 1);
         rerender();
     }, [grid, rerender]);
 
     const changeDifficulty = useCallback((key) => {
         // Remounting the grid via difficultyKey gives a fresh board, so this
-        // only needs to record the choice.
+        // only needs to record the choice. The gameId bump restarts the clock.
         setDifficultyKey(key);
+        setGameId(id => id + 1);
+    }, []);
+
+    const applyCustomSize = useCallback((size) => {
+        // Applying an identical config must not discard a live board: `grid`
+        // is memoized on `customSize` by reference, so a fresh object for an
+        // unchanged size would rebuild the grid and reset the game.
+        setCustomSize((prev) => (
+            prev.rows === size.rows
+            && prev.cols === size.cols
+            && prev.mineCount === size.mineCount
+                ? prev
+                : size
+        ));
+        setGameId(id => id + 1);
     }, []);
 
     const flagsPlaced = useMemo(
@@ -78,14 +114,19 @@ export function useMinesweeper(initialDifficulty = DEFAULT_DIFFICULTY) {
     return {
         grid,
         difficulty: DIFFICULTIES[difficultyKey],
+        boardSize,
+        customSize,
         status: grid.status,
         isOver,
         minesRemaining,
         allMinesFlagged,
+        elapsed,
+        timerRunning,
         reveal,
         toggleFlag,
         chord,
         reset,
         changeDifficulty,
+        applyCustomSize,
     };
 }

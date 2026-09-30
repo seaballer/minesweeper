@@ -86,6 +86,24 @@ Two rules to be aware of:
 - A no-op returns **`undefined`**, not `"playing"`. Check for it explicitly rather than assuming a string.
 - Once `grid.status` is `"win"` or `"gameover"`, further calls return that status without changing the board, so a won game can't be flipped to a loss by clicking a revealed mine.
 
+### Chording and detonation
+
+Clicking a revealed number — or pressing `c`, or middle-clicking, or
+right-clicking it — reveals its hidden neighbors once you have flagged exactly
+that many. It is still a guess: flag a safe cell and leave the real mine
+unflagged, and the counts still match and the board goes up.
+
+On a loss, every mine is uncovered and the **whole connected cluster** around
+the detonation is marked red, not just the cell you hit. A single red cell
+among grey neighbours reads as though the neighbours were safe.
+
+### Custom boards
+
+The Custom difficulty takes rows, columns, and mines. Input is clamped to
+2–30 rows, 2–40 columns, and at most `rows × cols - 1` mines, so a board always
+has a safe first click and is always winnable. Out-of-range or unparseable
+values fall back to the previous setting rather than producing a broken board.
+
 ### `grid.cells[row][col]`
 
 A 2D array of `Cell`. Each cell exposes `isMine`, `isExploded`, `isFlagged`, `isVisible`, and `neighborMines`, plus `reveal()`, `toggleFlag()`, and `placeMine()`.
@@ -128,6 +146,8 @@ Roughly in the order they'd unblock each other.
 - [X] Move the UI to React with Vite and Material UI
 - [x] Keyboard flagging with `f`
 - [x] Chording on a revealed number — click, middle click, right click, or `c`
+- [x] Timer that starts on the first reveal and stops on win or loss
+- [x] Custom difficulty with configurable rows, columns, and mines
 - [ ] Long-press to flag on touch devices (right click doesn't exist there)
 - [ ] Mark incorrect flags at game over (a flag on a safe cell)
 
@@ -145,7 +165,7 @@ Roughly in the order they'd unblock each other.
 
 - [X] Replace the empty `Game.js` stub with `useMinesweeper` as the controller
 - [X] Move board sizes into `difficulties.js` config
-- [ ] Persist best times per difficulty
+- [ ] Persist best times per difficulty (the timer now records them per run)
 - [ ] Add a seed input for shareable/reproducible boards
 - [ ] Keyboard navigation and focus management across the board
 - [x] Chording (click, middle click, right click, or `c` on a numbered cell)
