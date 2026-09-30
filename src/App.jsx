@@ -21,6 +21,7 @@ export default function App() {
         reset,
         changeDifficulty,
         allMinesFlagged,
+        chord,
     } = useMinesweeper();
 
     return (
@@ -49,8 +50,9 @@ export default function App() {
                         </Typography>
                     </Stack>
                     <Typography variant="body2">
-                        Left-click to reveal, right-click or press F to flag. The field is
-                        laid out on your first click, so that one is always safe.
+                        Left-click to reveal, right-click or press F to flag. Click a
+                        revealed number — or press C — to chord its neighbors. The field
+                        is laid out on your first click, so that one is always safe.
                     </Typography>
                 </Box>
 
@@ -64,12 +66,16 @@ export default function App() {
 
                 <StatusBanner status={status} />
 
-                <Box sx={{ overflowX: 'auto', pb: 1 }}>
+                {/* `container-type: inline-size` makes this box the reference
+                    for the `cqi` units the board sizes itself against, so cells
+                    fit the actual column rather than the viewport. */}
+                <Box sx={{ overflowX: 'auto', pb: 1, containerType: 'inline-size' }}>
                     <Box sx={{ display: 'flex', justifyContent: 'center', minWidth: 'fit-content' }}>
                         <Board
                             grid={grid}
                             onReveal={reveal}
                             onFlag={toggleFlag}
+                            onChord={chord}
                             disabled={isOver}
                         />
                     </Box>

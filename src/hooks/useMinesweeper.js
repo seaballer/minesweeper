@@ -45,6 +45,14 @@ export function useMinesweeper(initialDifficulty = DEFAULT_DIFFICULTY) {
         rerender();
     }, [grid, rerender]);
 
+    const chord = useCallback((row, col) => {
+        if (grid.status === 'win' || grid.status === 'gameover') {
+            return;
+        }
+        grid.chord(row, col);
+        rerender();
+    }, [grid, rerender]);
+
     const reset = useCallback(() => {
         grid.initialize();
         rerender();
@@ -76,6 +84,7 @@ export function useMinesweeper(initialDifficulty = DEFAULT_DIFFICULTY) {
         allMinesFlagged,
         reveal,
         toggleFlag,
+        chord,
         reset,
         changeDifficulty,
     };

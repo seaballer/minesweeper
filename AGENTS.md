@@ -26,7 +26,25 @@ testable outside a browser.
 - `src/game/Grid.js` — model: mine placement, flood fill, win detection. No DOM, no React.
 - `src/game/Cell.js` — single cell state. No DOM, no React.
 - `src/game/difficulties.js` — board size presets.
-- `src/components/` — presentational only. `Board`, `CellButton`, `ControlBar`, `StatusBanner`. They receive data and callbacks as props and hold no game state.
+- `src/components/` — presentational only. `Board`, `CellButton`, `ControlBar`, `StatusBanner`, `MineIcon`. They receive data and callbacks as props and hold no game state.
+
+## Board sizing
+
+Cell size is a `--cell` custom property on `Board`, read by both the grid
+tracks and the cells so they cannot disagree. Two things to know:
+
+- It is computed from **`100cqi`, not `100vw`.** The board sits inside a capped
+  `Container`, so a viewport unit over-reports the space available and the
+  Expert board overflows on wide screens. The `cqi` unit resolves against the
+  nearest `container-type: inline-size` ancestor, which is the scroll wrapper
+  in `App.jsx`. If you move the board, keep it inside that wrapper.
+- The 18px lower bound is deliberate. A 30-wide Expert board on a phone cannot
+  fit below that, so it scrolls there rather than shrinking into untappable
+  cells.
+
+`GAP` and `BOARD_CHROME` are exported from `Board.jsx` and imported by
+`ui-check.mjs`, so the test asserts the same arithmetic the CSS encodes
+instead of a hand-copied version.
 
 ## The one non-obvious React gotcha
 
@@ -64,7 +82,19 @@ An empty string means the value was rejected. `npm test` asserts this too.
 - On a 1×1 board with 1 mine there is no safe first cell, so the opening click loses. Unavoidable, not a bug.
 - Out-of-range coordinates throw a raw `TypeError`; there is no bounds checking.
 - `remainingSafeCells` only decrements when `Cell.reveal()` returns `true`. Win is an exact `=== 0` check.
+- `chord(row, col)` reveals the hidden neighbors of a revealed number once its flagged-neighbor count matches. It no-ops on zero cells, hidden cells, mines, and mismatched flag counts, and delegates each reveal to `revealCell` so `remainingSafeCells` and flood fill stay owned by one code path. Chording is still a guess: flagging a safe cell and leaving the real mine unflagged will detonate it.
 - `placeMines` is a seeded Fisher-Yates shuffle (`mulberry32`). Pass a seed for a reproducible board. `mineCount` is clamped to `rows * cols`.
+
+## Cell gestures
+
+`CellButton` has three separate predicates. Conflating them broke flag removal
+once already — don't:
+
+- `canReveal` — hidden and unflagged: left click reveals
+- `canFlag` — hidden, flagged or not: right click or `f` toggles the flag, so a
+  misplaced flag is removable without a reset
+- `canChord` — revealed, safe, and numbered: click, middle click, right click,
+  or `c` chords
 
 ## Conventions
 

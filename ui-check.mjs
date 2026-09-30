@@ -32,6 +32,7 @@ const { ThemeProvider } = await import('@mui/material/styles');
 const CssBaseline = (await import('@mui/material/CssBaseline')).default;
 const App = (await vite.ssrLoadModule('/src/App.jsx')).default;
 const theme = (await vite.ssrLoadModule('/src/theme.js')).default;
+const { Grid } = await vite.ssrLoadModule('/src/game/Grid.js');
 
 const errors = [];
 console.error = (...a) => { errors.push(a.map(String).join(' ')); };
@@ -167,6 +168,111 @@ check('counter exposes a role', $('#mine-counter')?.getAttribute('role') === 'st
 // Board must not claim the ARIA grid pattern it doesn't implement.
 check('board is a group not a malformed grid',
     !!$('#minefield') && !$('[role="grid"]'));
+
+// The board must fit its CONTAINER, not the viewport: it lives inside a
+// maxWidth Container, so sizing against 100vw over-reports and overflows on
+// wide screens. jsdom won't evaluate cqi/clamp, so assert the same arithmetic
+// the stylesheet encodes, using the constants imported from Board.jsx.
+const { GAP, BOARD_CHROME } = await vite.ssrLoadModule('/src/components/Board.jsx');
+const CONTAINER_MAX = 960; // MUI `md`, the widest the board ever gets
+const GUTTER = 48;         // Container padding
+
+const cellFor = (cols, containerWidth) =>
+    Math.max(18, Math.min(30, (containerWidth - BOARD_CHROME - (cols - 1) * GAP) / cols));
+
+const boardWidth = (cols, containerWidth) =>
+    cols * cellFor(cols, containerWidth) + (cols - 1) * GAP + BOARD_CHROME;
+
+// Every difficulty must fit at every desktop/tablet width, including ones
+// where the Container cap binds (vw above 960) and ones where it doesn't.
+for (const [label, cols] of [['beginner', 9], ['intermediate', 16], ['expert', 30]]) {
+    for (const vw of [1920, 1440, 1280, 1107, 1024, 960, 900, 768]) {
+        const container = Math.min(vw, CONTAINER_MAX) - GUTTER;
+        const bw = boardWidth(cols, container);
+        check(`${label} fits at ${vw}px`, bw <= container,
+            `board ${bw.toFixed(0)} vs ${container} available`);
+    }
+}
+
+// The 18px floor must hold: cells never shrink below a tappable size.
+for (const cols of [9, 16, 30]) {
+    check(`cell floor is 18px at 375px (${cols} cols)`, cellFor(cols, 375 - GUTTER) >= 18,
+        `${cellFor(cols, 375 - GUTTER).toFixed(1)}px`);
+}
+
+// Cells must size from the shared variable so tracks and cells agree. The
+// rules live in Emotion's sheet, which jsdom does not expose, so read the
+// component source instead of guessing.
+const boardSrc = await (await import('node:fs/promises')).readFile('src/components/Board.jsx', 'utf8');
+const cellSrc = await (await import('node:fs/promises')).readFile('src/components/CellButton.jsx', 'utf8');
+// Strip comments before scanning, so prose about 100vw isn't mistaken for use.
+const code = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+check('board uses cqi, not 100vw', /100cqi/.test(code(boardSrc)) && !/100vw/.test(code(boardSrc)));
+check('cells size from the shared variable', /var\(--cell\)/.test(code(cellSrc)));
+check('no hardcoded 30px cell width', !/width:\s*30\s*,/.test(cellSrc));
+
+// Chording: a revealed number with matching flags must open its neighbors.
+await act(async () => { byText('Reset').click(); });
+const chordProbe = new Grid(5, 5, 2, 1);
+chordProbe.initialize();
+chordProbe.cells[0][0].placeMine();
+chordProbe.cells[4][4].placeMine();
+chordProbe.countNeighborMines();
+chordProbe.minesPlaced = true;
+chordProbe.cells[0][1].reveal();
+chordProbe.cells[0][0].toggleFlag();
+const beforeChord = chordProbe.cells.flat().filter((c) => c.isVisible).length;
+chordProbe.chord(0, 1);
+const afterChord = chordProbe.cells.flat().filter((c) => c.isVisible).length;
+check('chord reveals the remaining neighbors', afterChord > beforeChord, `${beforeChord} -> ${afterChord}`);
+check('chord leaves the flagged mine hidden', !chordProbe.cells[0][0].isVisible);
+// A second chord on an already-open cell must not reveal anything new.
+const afterSecond = chordProbe.cells.flat().filter((c) => c.isVisible).length;
+chordProbe.chord(0, 1);
+check('repeat chord is a no-op', chordProbe.cells.flat().filter((c) => c.isVisible).length === afterSecond);
+
+await act(async () => { byText('Reset').click(); });
+// Chording with the wrong flag count must be a no-op.
+const wrong = new Grid(5, 5, 2, 1);
+wrong.initialize();
+wrong.cells[0][0].placeMine();
+wrong.cells[4][4].placeMine();
+wrong.countNeighborMines();
+wrong.minesPlaced = true;
+wrong.cells[0][1].reveal();
+const beforeWrong = wrong.cells.flat().filter((c) => c.isVisible).length;
+check('chord with no flags does nothing', wrong.chord(0, 1) === undefined
+    && wrong.cells.flat().filter((c) => c.isVisible).length === beforeWrong);
+
+// A chordable cell must tell assistive tech the gesture exists. Replay the
+// same board as the model probe so a numbered cell is definitely revealed.
+const chordUi = new Grid(5, 5, 2, 1);
+chordUi.initialize();
+chordUi.cells[0][0].placeMine();
+chordUi.cells[4][4].placeMine();
+chordUi.countNeighborMines();
+chordUi.minesPlaced = true;
+chordUi.revealCell(0, 1);
+check('model exposes a chordable revealed number', chordUi.cells[0][1].isVisible
+    && chordUi.cells[0][1].neighborMines === 1);
+
+// Flagging must be reversible: right-clicking a flagged cell removes the flag.
+await act(async () => { byText('Reset').click(); });
+const target = cells().find((c) => !c.disabled && c.textContent.trim() === '');
+const rightClick = (el) => el.dispatchEvent(
+    new dom.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+await act(async () => { rightClick(target); });
+check('right click flags', counter() === '009', `got "${counter()}"`);
+await act(async () => { rightClick(target); });
+check('right click again unflags', counter() === '010', `got "${counter()}"`);
+
+// The counter must show a mine glyph beside the number. The icon is a sibling
+// inside the counter's parent, so look there rather than at the counter itself.
+const counterParent = $('#mine-counter')?.parentElement;
+check('mine counter has a mine icon', (counterParent?.querySelectorAll('svg').length ?? 0) >= 1,
+    `${counterParent?.querySelectorAll('svg').length} svg beside the counter`);
+check('mine icon sits left of the digits',
+    counterParent?.firstElementChild?.tagName.toLowerCase() === 'svg');
 
 const real = errors.filter((e) => !/act\(|useLayoutEffect|deprecat/i.test(e));
 check('no react warnings', real.length === 0, real.slice(0, 2).join(' | '));

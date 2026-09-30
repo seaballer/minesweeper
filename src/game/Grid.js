@@ -126,6 +126,49 @@ export class Grid {
         return neighbors;
     }
 
+    // Chording: when a revealed number has exactly as many flagged neighbors
+    // as it has adjacent mines, the remaining hidden neighbors are safe and
+    // are revealed at once. No-ops otherwise, which is what makes it a guess
+    // the player can be wrong about.
+    chord(row, col) {
+        if (this.status === "win" || this.status === "gameover") {
+            return this.status;
+        }
+
+        const cell = this.cells[row][col];
+
+        // Only a revealed, safe, numbered cell can be chorded. A zero cell is
+        // already covered by flood fill.
+        if (!cell.isVisible || cell.isMine || cell.neighborMines === 0) {
+            return;
+        }
+
+        // Mines must already be placed; chording before the first reveal has
+        // no flags to compare against.
+        if (!this.minesPlaced) {
+            return;
+        }
+
+        const neighbors = this.getNeighbors(row, col);
+        const flagged = neighbors.filter(n => n.cell.isFlagged).length;
+
+        if (flagged !== cell.neighborMines) {
+            return;
+        }
+
+        for (const n of neighbors) {
+            if (n.cell.isFlagged || n.cell.isVisible) {
+                continue;
+            }
+            const result = this.revealCell(n.row, n.col);
+            if (result === "win" || result === "gameover") {
+                return result;
+            }
+        }
+
+        return "playing";
+    }
+
     countNeighborMines() {
         for (let i = 0; i < this.rows; i++) {
             for (let j = 0; j < this.cols; j++) {

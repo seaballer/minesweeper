@@ -1,10 +1,19 @@
 import Box from '@mui/material/Box';
 import CellButton from './CellButton.jsx';
 
+// Spacing constants, named so the sizing math below stays readable and the
+// test harness can import the same numbers instead of hand-copying them.
+const GAP = 3;
+const PAD = 16;
+// Board padding (2 * PAD) plus its 1px border on each side.
+const BOARD_CHROME = PAD * 2 + 2;
+
+export { GAP, BOARD_CHROME };
+
 /**
  * The board itself: a fixed grid of cells, one click handler per input.
  */
-export default function Board({ grid, onReveal, onFlag, disabled }) {
+export default function Board({ grid, onReveal, onFlag, onChord, disabled }) {
     return (
         <Box
             // `group`, not `grid`: a real ARIA grid requires owned row/gridcell
@@ -16,8 +25,22 @@ export default function Board({ grid, onReveal, onFlag, disabled }) {
             aria-label="Minefield"
             sx={{
                 display: 'grid',
-                gridTemplateColumns: `repeat(${grid.cols}, 30px)`,
-                gap: '3px',
+                // `--cell` is the single source of truth for cell size, read by
+                // both the grid tracks and the cells so they cannot disagree.
+                //
+                // It must size against the CONTAINER, not the viewport: the
+                // board sits inside a capped Container, so `100vw` over-reports
+                // the space available and expert overflows on wide screens.
+                // `cqi` measures the nearest `container-type: inline-size`
+                // ancestor (set on the scroll wrapper in App.jsx) and is
+                // immune to scrollbar width and Container caps.
+                //
+                // The 18px floor keeps cells tappable. A 30-wide Expert board
+                // on a phone cannot fit below that, so it scrolls there rather
+                // than shrinking into nothing.
+                '--cell': `clamp(18px, min(30px, calc((100cqi - ${BOARD_CHROME}px - ${(grid.cols - 1) * GAP}px) / ${grid.cols})), 30px)`,
+                gridTemplateColumns: `repeat(${grid.cols}, var(--cell))`,
+                gap: `${GAP}px`,
                 p: 2,
                 // Recessed bezel: the board reads as a panel sunk into the
                 // page rather than a card sitting on top of it.
@@ -42,6 +65,7 @@ export default function Board({ grid, onReveal, onFlag, disabled }) {
                         neighborMines={cell.neighborMines}
                         onReveal={onReveal}
                         onFlag={onFlag}
+                        onChord={onChord}
                         disabled={disabled}
                     />
                 ))

@@ -109,6 +109,9 @@ first version have been smoothed out; what remains is noted here.
   error. Validate at the UI layer.
 - **Flagging needs a right click or the `f` key**, so it doesn't work on touch
   devices yet.
+- **Expert scrolls on phones.** Cells have an 18px floor so they stay tappable;
+  a 30-wide board cannot fit in 375px below that. Every difficulty fits without
+  scrolling at 768px and up.
 
 ## To-do
 
@@ -123,7 +126,8 @@ Roughly in the order they'd unblock each other.
 - [X] Display win / game-over state and stop accepting input
 - [X] Difficulty presets (Beginner 9×9/10, Intermediate 16×16/40, Expert 30×16/99)
 - [X] Move the UI to React with Vite and Material UI
-- [X] Keyboard flagging with `f`
+- [x] Keyboard flagging with `f`
+- [x] Chording on a revealed number — click, middle click, right click, or `c`
 - [ ] Long-press to flag on touch devices (right click doesn't exist there)
 - [ ] Mark incorrect flags at game over (a flag on a safe cell)
 
@@ -144,7 +148,7 @@ Roughly in the order they'd unblock each other.
 - [ ] Persist best times per difficulty
 - [ ] Add a seed input for shareable/reproducible boards
 - [ ] Keyboard navigation and focus management across the board
-- [ ] Chording (click both buttons on a numbered cell to reveal neighbors)
+- [x] Chording (click, middle click, right click, or `c` on a numbered cell)
 
 ### Testing
 
