@@ -7,7 +7,7 @@ function mulberry32(seed) {
 
     return function () {
         a |= 0;
-        a = (a + 0x6D2B79F5) | 0;
+        a = (a + 0x6d2b79f5) | 0;
         let t = Math.imul(a ^ (a >>> 15), 1 | a);
         t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
         return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
@@ -32,7 +32,7 @@ export class Grid {
         this.remainingSafeCells = rows * cols - this.mineCount;
         this.cells = this.createGrid();
         this.minesPlaced = false;
-        this.status = "ready";
+        this.status = 'ready';
     }
 
     // Resets to a fresh, unplayed board. Mines are deliberately NOT placed
@@ -49,7 +49,7 @@ export class Grid {
         this.cells = this.createGrid();
         this.remainingSafeCells = this.rows * this.cols - this.mineCount;
         this.minesPlaced = false;
-        this.status = "ready";
+        this.status = 'ready';
     }
 
     createGrid() {
@@ -89,9 +89,12 @@ export class Grid {
         const total = this.rows * this.cols;
         const canExclude = total - 1 >= this.mineCount;
         const safePosition = safeRow * this.cols + safeCol;
-        const safeInBounds = canExclude
-            && safeRow >= 0 && safeRow < this.rows
-            && safeCol >= 0 && safeCol < this.cols;
+        const safeInBounds =
+            canExclude &&
+            safeRow >= 0 &&
+            safeRow < this.rows &&
+            safeCol >= 0 &&
+            safeCol < this.cols;
 
         const positions = [];
         for (let i = 0; i < this.rows; i++) {
@@ -129,7 +132,7 @@ export class Grid {
                 neighbors.push({
                     row: newRow,
                     col: newCol,
-                    cell: this.cells[newRow][newCol]
+                    cell: this.cells[newRow][newCol],
                 });
             }
         }
@@ -146,7 +149,7 @@ export class Grid {
     // status rather than nothing: the board is unchanged, so the status is
     // simply whatever it already was.
     chord(row, col) {
-        if (this.status === "win" || this.status === "gameover") {
+        if (this.status === 'win' || this.status === 'gameover') {
             return this.status;
         }
 
@@ -165,7 +168,7 @@ export class Grid {
         }
 
         const neighbors = this.getNeighbors(row, col);
-        const flagged = neighbors.filter(n => n.cell.isFlagged).length;
+        const flagged = neighbors.filter((n) => n.cell.isFlagged).length;
 
         if (flagged !== cell.neighborMines) {
             return this.status;
@@ -176,12 +179,12 @@ export class Grid {
                 continue;
             }
             const result = this.revealCell(n.row, n.col);
-            if (result === "win" || result === "gameover") {
+            if (result === 'win' || result === 'gameover') {
                 return result;
             }
         }
 
-        return "playing";
+        return 'playing';
     }
 
     countNeighborMines() {
@@ -190,10 +193,10 @@ export class Grid {
                 const cell = this.cells[i][j];
                 if (!cell.isMine) {
                     const neighbors = this.getNeighbors(i, j);
-                    cell.neighborMines = neighbors.filter(n => n.cell.isMine).length;
+                    cell.neighborMines = neighbors.filter((n) => n.cell.isMine).length;
                 }
             }
-        }    
+        }
     }
 
     // Always returns the game status: "playing", "win", or "gameover".
@@ -204,7 +207,7 @@ export class Grid {
     revealCell(row, col) {
         // Once the game is decided it stops accepting input, so a won game
         // can't be flipped to a loss by clicking a revealed mine.
-        if (this.status === "win" || this.status === "gameover") {
+        if (this.status === 'win' || this.status === 'gameover') {
             return this.status;
         }
 
@@ -218,7 +221,7 @@ export class Grid {
         }
         if (cell.isMine) {
             this.revealAllMines(row, col);
-            this.status = "gameover";
+            this.status = 'gameover';
             return this.status;
         }
 
@@ -232,11 +235,11 @@ export class Grid {
 
         if (this.remainingSafeCells === 0) {
             this.revealAllMines();
-            this.status = "win";
+            this.status = 'win';
             return this.status;
         }
 
-        this.status = "playing";
+        this.status = 'playing';
         return this.status;
     }
 

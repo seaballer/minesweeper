@@ -39,7 +39,7 @@ export function useMinesweeper(initialDifficulty = DEFAULT_DIFFICULTY) {
         [grid]
     );
 
-    const rerender = useCallback(() => setVersion(v => v + 1), []);
+    const rerender = useCallback(() => setVersion((v) => v + 1), []);
 
     const isOver = grid.status === 'win' || grid.status === 'gameover';
 
@@ -49,33 +49,42 @@ export function useMinesweeper(initialDifficulty = DEFAULT_DIFFICULTY) {
     const timerRunning = grid.status !== 'ready' && !isOver;
     const elapsed = useTimer(timerRunning, gameId);
 
-    const reveal = useCallback((row, col) => {
-        if (grid.status === 'win' || grid.status === 'gameover') {
-            return;
-        }
-        grid.revealCell(row, col);
-        rerender();
-    }, [grid, rerender]);
+    const reveal = useCallback(
+        (row, col) => {
+            if (grid.status === 'win' || grid.status === 'gameover') {
+                return;
+            }
+            grid.revealCell(row, col);
+            rerender();
+        },
+        [grid, rerender]
+    );
 
-    const toggleFlag = useCallback((row, col) => {
-        if (grid.status === 'win' || grid.status === 'gameover') {
-            return;
-        }
-        grid.cells[row][col].toggleFlag();
-        rerender();
-    }, [grid, rerender]);
+    const toggleFlag = useCallback(
+        (row, col) => {
+            if (grid.status === 'win' || grid.status === 'gameover') {
+                return;
+            }
+            grid.cells[row][col].toggleFlag();
+            rerender();
+        },
+        [grid, rerender]
+    );
 
-    const chord = useCallback((row, col) => {
-        if (grid.status === 'win' || grid.status === 'gameover') {
-            return;
-        }
-        grid.chord(row, col);
-        rerender();
-    }, [grid, rerender]);
+    const chord = useCallback(
+        (row, col) => {
+            if (grid.status === 'win' || grid.status === 'gameover') {
+                return;
+            }
+            grid.chord(row, col);
+            rerender();
+        },
+        [grid, rerender]
+    );
 
     const reset = useCallback(() => {
         grid.initialize();
-        setGameId(id => id + 1);
+        setGameId((id) => id + 1);
         rerender();
     }, [grid, rerender]);
 
@@ -83,25 +92,32 @@ export function useMinesweeper(initialDifficulty = DEFAULT_DIFFICULTY) {
         // Remounting the grid via difficultyKey gives a fresh board, so this
         // only needs to record the choice. The gameId bump restarts the clock.
         setDifficultyKey(key);
-        setGameId(id => id + 1);
+        setGameId((id) => id + 1);
     }, []);
 
     const applyCustomSize = useCallback((size) => {
         // Applying an identical config must not discard a live board: `grid`
         // is memoized on `customSize` by reference, so a fresh object for an
         // unchanged size would rebuild the grid and reset the game.
-        setCustomSize((prev) => (
-            prev.rows === size.rows
-            && prev.cols === size.cols
-            && prev.mineCount === size.mineCount
+        setCustomSize((prev) =>
+            prev.rows === size.rows && prev.cols === size.cols && prev.mineCount === size.mineCount
                 ? prev
                 : size
-        ));
-        setGameId(id => id + 1);
+        );
+        setGameId((id) => id + 1);
     }, []);
 
+    // `version` is an invalidation token, not a value the memo reads: the
+    // model mutates in place, so without it this would never recompute. The
+    // linter flags it as an unnecessary dependency, which is exactly the
+    // "adjust state when something external changes" case its docs describe.
+    //
+    // Recounting beats keeping a counter in state here: the scan is
+    // self-healing if the model is mutated by a path that forgets to bump the
+    // counter, and at 480 cells the cost is negligible next to a click.
     const flagsPlaced = useMemo(
-        () => grid.cells.flat().filter(cell => cell.isFlagged).length,
+        () => grid.cells.flat().filter((cell) => cell.isFlagged).length,
+        // eslint-disable-next-line react-hooks/exhaustive-deps
         [grid, version]
     );
 

@@ -1,32 +1,40 @@
 {
-  "name": "minesweeper",
-  "version": "1.0.0",
-  "description": "A browser Minesweeper built with React and Material UI.",
-  "type": "module",
-  "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
-    "test": "node ui-check.mjs"
-  },
-  "keywords": [
-    "minesweeper",
-    "react",
-    "material-ui"
-  ],
-  "author": "",
-  "license": "ISC",
-  "dependencies": {
-    "@emotion/react": "^11.14.0",
-    "@emotion/styled": "^11.14.1",
-    "@mui/icons-material": "^9.4.0",
-    "@mui/material": "^9.4.0",
-    "react": "^19.3.0",
-    "react-dom": "^19.3.0"
-  },
-  "devDependencies": {
-    "@vitejs/plugin-react": "^6.1.1",
-    "jsdom": "^29.1.1",
-    "vite": "^8.3.1"
-  }
+    "name": "minesweeper",
+    "version": "1.0.0",
+    "description": "A browser Minesweeper built with React and Material UI.",
+    "type": "module",
+    "scripts": {
+        "dev": "vite",
+        "build": "vite build",
+        "preview": "vite preview",
+        "test": "node ui-check.mjs",
+        "lint": "eslint .",
+        "format": "prettier --write .",
+        "format:check": "prettier --check ."
+    },
+    "keywords": [
+        "minesweeper",
+        "react",
+        "material-ui"
+    ],
+    "author": "",
+    "license": "ISC",
+    "dependencies": {
+        "@emotion/react": "^11.14.0",
+        "@emotion/styled": "^11.14.1",
+        "@mui/icons-material": "^9.4.0",
+        "@mui/material": "^9.4.0",
+        "react": "^19.3.0",
+        "react-dom": "^19.3.0"
+    },
+    "devDependencies": {
+        "@eslint/js": "^10.0.1",
+        "@vitejs/plugin-react": "^6.1.1",
+        "eslint": "^10.11.0",
+        "eslint-plugin-react-hooks": "^7.1.1",
+        "globals": "^17.12.0",
+        "jsdom": "^29.1.1",
+        "prettier": "^3.9.9",
+        "vite": "^8.3.1"
+    }
 }

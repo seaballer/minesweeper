@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
@@ -16,6 +16,11 @@ import { CUSTOM_LIMITS, resolveCustom } from '../game/difficulties.js';
  * Held as raw strings while editing so a half-typed value like "1" isn't
  * clamped out from under the cursor mid-keystroke. The config only updates on
  * Apply, and `resolveCustom` sanitizes it, so bad input can't reach the grid.
+ *
+ * The parent must pass a `key` derived from the applied config, so switching
+ * difficulty or size remounts this with fresh drafts. React's guidance for
+ * "adjusting state when a prop changes" is to reset it with a key rather than
+ * an effect, which would cause a cascading render on every change.
  */
 export default function CustomSettings({ value, onApply }) {
     const theme = useTheme();
@@ -25,22 +30,14 @@ export default function CustomSettings({ value, onApply }) {
         mineCount: String(value.mineCount),
     });
 
-    // Re-sync when the applied config changes from elsewhere (difficulty switch).
-    useEffect(() => {
-        setDraft({
-            rows: String(value.rows),
-            cols: String(value.cols),
-            mineCount: String(value.mineCount),
-        });
-    }, [value.rows, value.cols, value.mineCount]);
-
     const preview = resolveCustom(draft, value);
     // Compare resolved values, not the raw strings: typing "016" against an
     // applied "16" is not a change, and Enter would otherwise re-apply
     // the same board.
-    const dirty = preview.rows !== value.rows
-        || preview.cols !== value.cols
-        || preview.mineCount !== value.mineCount;
+    const dirty =
+        preview.rows !== value.rows ||
+        preview.cols !== value.cols ||
+        preview.mineCount !== value.mineCount;
 
     // A plain object style, so Emotion can't be relied on for vendor or
     // pseudo-element selectors here. `CSS-in-JS-with-@` would allow nesting,
@@ -72,7 +69,9 @@ export default function CustomSettings({ value, onApply }) {
 
     const field = (name, label, min, max) => (
         <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <Typography variant="caption" color="text.secondary">{label}</Typography>
+            <Typography variant="caption" color="text.secondary">
+                {label}
+            </Typography>
             <input
                 type="number"
                 inputMode="numeric"
@@ -136,10 +135,7 @@ export default function CustomSettings({ value, onApply }) {
     // The mine field's ceiling depends on the current rows/cols, so it has to
     // be computed here rather than read from CUSTOM_LIMITS. A board always
     // needs one safe cell, or the first click can never be safe.
-    const maxMines = Math.max(
-        CUSTOM_LIMITS.minMines,
-        preview.rows * preview.cols - 1
-    );
+    const maxMines = Math.max(CUSTOM_LIMITS.minMines, preview.rows * preview.cols - 1);
 
     return (
         <Box

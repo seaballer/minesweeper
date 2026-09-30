@@ -54,9 +54,17 @@ function CellButton({
 
     const label = [
         `Row ${row + 1} column ${col + 1}`,
-        isVisible ? (isMine ? 'mine' : neighborMines ? `${neighborMines} adjacent mines` : 'clear') : 'hidden',
+        isVisible
+            ? isMine
+                ? 'mine'
+                : neighborMines
+                  ? `${neighborMines} adjacent mines`
+                  : 'clear'
+            : 'hidden',
         isFlagged ? 'flagged' : '',
-    ].filter(Boolean).join(', ');
+    ]
+        .filter(Boolean)
+        .join(', ');
 
     // Two independent gestures: an unrevealed cell reveals, a revealed number
     // chords. A zero cell is excluded because flood fill already covered it.
@@ -145,11 +153,12 @@ function CellButton({
                 // makes a cascade of revealed cells read as a sequence.
                 transition: 'transform 90ms ease-out, background-color 140ms ease',
                 transform: raised ? 'none' : 'scale(0.96)',
-                color: isVisible && !isMine
-                    ? NUMBER_COLORS[neighborMines] ?? 'text.primary'
-                    : isFlagged
-                        ? 'secondary.main'
-                        : 'text.secondary',
+                color:
+                    isVisible && !isMine
+                        ? (NUMBER_COLORS[neighborMines] ?? 'text.primary')
+                        : isFlagged
+                          ? 'secondary.main'
+                          : 'text.secondary',
 
                 // Raised cells get a real key feel: a top highlight, a
                 // gradient face, and a bottom shadow. Revealed cells go flat.
@@ -159,18 +168,18 @@ function CellButton({
                 backgroundColor: isExploded
                     ? 'error.main'
                     : raised
-                        ? 'transparent'
-                        : isMine
-                            ? 'board.mineTint'
-                            : 'board.revealed',
+                      ? 'transparent'
+                      : isMine
+                        ? 'board.mineTint'
+                        : 'board.revealed',
                 ...(raised && {
                     backgroundImage: `linear-gradient(180deg, ${theme.board.keyTop} 0%, ${theme.board.keyBottom} 100%)`,
                 }),
                 boxShadow: isExploded
                     ? 'inset 0 0 0 1px rgba(255,255,255,0.25)'
                     : raised
-                        ? 'inset 0 1px 0 rgba(255,255,255,0.07), 0 2px 0 rgba(0,0,0,0.35)'
-                        : 'none',
+                      ? 'inset 0 1px 0 rgba(255,255,255,0.07), 0 2px 0 rgba(0,0,0,0.35)'
+                      : 'none',
 
                 ...(interactive && {
                     '&:hover': {
@@ -191,7 +200,9 @@ function CellButton({
                 <Box sx={{ color: isExploded ? 'common.white' : 'error.main', display: 'flex' }}>
                     {content}
                 </Box>
-            ) : content}
+            ) : (
+                content
+            )}
         </Box>
     );
 }

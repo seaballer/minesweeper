@@ -8,7 +8,7 @@ export class Cell {
     }
 
     reveal() {
-        if(this.isVisible) return false;
+        if (this.isVisible) return false;
 
         this.isVisible = true;
         return true;

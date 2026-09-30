@@ -29,9 +29,15 @@ export default function StatusBanner({ status }) {
                 border: '1px solid',
                 // Reserve the space so the board doesn't jump when the result
                 // appears; only the colors change.
-                borderColor: message ? (won ? 'rgba(61,220,132,0.35)' : 'rgba(255,90,82,0.35)') : 'transparent',
+                borderColor: message
+                    ? won
+                        ? 'rgba(61,220,132,0.35)'
+                        : 'rgba(255,90,82,0.35)'
+                    : 'transparent',
                 backgroundColor: message
-                    ? (won ? 'rgba(61,220,132,0.06)' : 'rgba(255,90,82,0.06)')
+                    ? won
+                        ? 'rgba(61,220,132,0.06)'
+                        : 'rgba(255,90,82,0.06)'
                     : 'transparent',
                 color: won ? 'success.main' : 'error.main',
                 fontSize: 14,

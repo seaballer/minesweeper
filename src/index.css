@@ -25,10 +25,13 @@ body {
        `background-attachment: fixed` is unsupported on iOS Safari. */
     background-image:
         url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E"),
-        radial-gradient(1100px 620px at 12% -8%, rgba(56, 116, 203, 0.20), transparent 60%),
+        radial-gradient(1100px 620px at 12% -8%, rgba(56, 116, 203, 0.2), transparent 60%),
         radial-gradient(900px 520px at 105% 108%, rgba(197, 106, 32, 0.13), transparent 62%);
     background-repeat: repeat, no-repeat, no-repeat;
-    background-size: 160px 160px, cover, cover;
+    background-size:
+        160px 160px,
+        cover,
+        cover;
     background-attachment: scroll;
     /* Grain at low opacity, applied by the blend rather than an overlay
        element, so it composites in one pass. */

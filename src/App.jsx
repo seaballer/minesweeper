@@ -92,7 +92,13 @@ export default function App() {
                 />
 
                 {difficulty.key === CUSTOM_KEY && (
-                    <CustomSettings value={customSize} onApply={applyCustomSize} />
+                    // Keyed on the applied config so applying a new size resets
+                    // the drafts, rather than an effect syncing them.
+                    <CustomSettings
+                        key={`${customSize.rows}-${customSize.cols}-${customSize.mineCount}`}
+                        value={customSize}
+                        onApply={applyCustomSize}
+                    />
                 )}
 
                 <StatusBanner status={status} />

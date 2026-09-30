@@ -9,7 +9,11 @@ testable outside a browser.
 - `npm run dev` — Vite dev server on <http://localhost:5173>
 - `npm run build` — production bundle into `dist/`
 - `npm run preview` — serve the built bundle
-- `npm test` — mounts the components in jsdom and drives them (37 assertions)
+- `npm test` — mounts the components in jsdom and drives them (159 assertions)
+- `npm run lint` — ESLint (`react-hooks` rules included). Must be clean before committing.
+- `npm run format` / `npm run format:check` — Prettier. The config matches the
+  existing style: 4-space indent, single quotes, 100 columns.
+- `.opencode/` is gitignored third-party tooling and is excluded from both.
 - To check the model alone, run it directly in Node:
   `node --input-type=module -e "import('./src/game/Grid.js').then(m => { const g = new m.Grid(9,9,10,1); g.revealCell(4,4); console.log(g.status); })"`
   The 4th `Grid` arg is a seed, so results are reproducible.

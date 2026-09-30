@@ -4,7 +4,7 @@ import Popover from '@mui/material/Popover';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Divider from '@mui/material/Divider';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useTheme } from '@mui/material/styles';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 
@@ -13,10 +13,7 @@ import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 const CONTROLS = [
     ['Left click', 'Reveal a cell'],
     ['Right click', 'Flag a cell, or remove a flag'],
-    [
-        'Click a number',
-        'Chord — reveal its neighbors once the flags around it add up',
-    ],
+    ['Click a number', 'Chord — reveal its neighbors once the flags around it add up'],
     ['Middle click', 'Chord, same as clicking a number'],
 ];
 
@@ -85,13 +82,14 @@ export default function ControlsInfo({ open, onOpenChange }) {
     const theme = useTheme();
     const [anchor, setAnchor] = useState(null);
 
-    // `open` is owned by the parent so keyboard shortcuts elsewhere can be
-    // suspended while this dialog is up.
-    useEffect(() => {
-        if (!open) {
-            setAnchor(null);
-        }
-    }, [open]);
+    // `anchor` is the single source of truth and `open` is derived from it, so
+    // there is no effect syncing one to the other — that caused a cascading
+    // render, and could in principle desync the two. The parent only needs to
+    // *know* whether the dialog is up, so it is told on each change instead.
+    const close = () => {
+        setAnchor(null);
+        onOpenChange(false);
+    };
 
     return (
         <>
@@ -102,8 +100,9 @@ export default function ControlsInfo({ open, onOpenChange }) {
                 onClick={(event) => {
                     // Toggle. Setting the anchor unconditionally would leave
                     // the popover open on every subsequent click.
-                    setAnchor(event.currentTarget);
-                    onOpenChange(!open);
+                    const next = open ? null : event.currentTarget;
+                    setAnchor(next);
+                    onOpenChange(next !== null);
                 }}
                 // A native title rather than MUI's Tooltip, which costs ~31kB
                 // for a single string. The aria-label carries the same text.
@@ -126,10 +125,7 @@ export default function ControlsInfo({ open, onOpenChange }) {
             <Popover
                 open={open}
                 anchorEl={anchor}
-                onClose={() => {
-                    setAnchor(null);
-                    onOpenChange(false);
-                }}
+                onClose={close}
                 // MUI's Popover does not set a role, so give it one: this is a
                 // dialog, and a screen reader should say so.
                 anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}

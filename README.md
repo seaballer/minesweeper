@@ -13,10 +13,10 @@ npm run dev     # http://localhost:5173
 
 Other scripts:
 
-| Command             | Does                                 |
-| ------------------- | ------------------------------------ |
+| Command           | Does                                 |
+| ----------------- | ------------------------------------ |
 | `npm run dev`     | Dev server with hot reload           |
-| `npm run build`   | Production bundle into`dist/`      |
+| `npm run build`   | Production bundle into`dist/`        |
 | `npm run preview` | Serve the built bundle               |
 | `npm test`        | Mounts the UI in jsdom and drives it |
 
@@ -55,8 +55,8 @@ The model layer is deliberately framework-free, so the rules stay testable in No
 Builds the board. The seed is optional and controls what happens on reset:
 
 ```js
-new Grid(9, 9, 10, 1234)  // pinned: this exact board, every time
-new Grid(9, 9, 10)         // random: a new board on every reset
+new Grid(9, 9, 10, 1234); // pinned: this exact board, every time
+new Grid(9, 9, 10); // random: a new board on every reset
 ```
 
 Passing a seed **pins** it. A pinned grid replays the identical mine layout
@@ -83,12 +83,12 @@ To inspect a board without playing it, trigger placement directly with `grid.ens
 Reveals a cell and floods outward through any zero-count cells. **Always returns
 a status string** — never `undefined`:
 
-| Return value   | Meaning                                                        |
-| -------------- | -------------------------------------------------------------- |
-| `"ready"`     | No-op before the first reveal, when the board is still unplaced |
-| `"playing"`   | Reveal succeeded, or a no-op (cell already visible or flagged)  |
-| `"win"`       | Last safe cell revealed                                        |
-| `"gameover"`  | A mine was revealed                                            |
+| Return value | Meaning                                                         |
+| ------------ | --------------------------------------------------------------- |
+| `"ready"`    | No-op before the first reveal, when the board is still unplaced |
+| `"playing"`  | Reveal succeeded, or a no-op (cell already visible or flagged)  |
+| `"win"`      | Last safe cell revealed                                         |
+| `"gameover"` | A mine was revealed                                             |
 
 A no-op returns the current status rather than nothing: the board is unchanged,
 so the status is simply whatever it already was. `grid.chord` follows the same
