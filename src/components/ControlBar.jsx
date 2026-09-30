@@ -5,6 +5,7 @@ import { useTheme } from '@mui/material/styles';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import MineIcon from './MineIcon.jsx';
 import Timer from './Timer.jsx';
+import { PAD as BOARD_PADDING, BORDER } from './Board.jsx';
 
 /**
  * The readout row that sits directly above the board: mine count on the left,
@@ -31,14 +32,13 @@ export default function ControlBar({
                 gridTemplateColumns: '1fr auto 1fr',
                 alignItems: 'center',
                 gap: 1.5,
-                // Match the board's own footprint. Without this the row spans
-                // the full container and, on a small board, the readouts float
-                // hundreds of pixels out on either side of it.
-                width: 'fit-content',
-                maxWidth: '100%',
-                mx: 'auto',
-                // Aligns to the cell grid rather than the board's outer border.
-                px: 2,
+                // Stretch to the shared column, which the board sizes to fit-content.
+                // The counter then lines up with the first column of cells and
+                // the timer with the last, at every board size.
+                width: '100%',
+                // Board padding plus its 1px border, so the readouts align to
+                // the first and last cell rather than to the bezel edge.
+                px: `${BOARD_PADDING + BORDER}px`,
             }}
         >
             <Box

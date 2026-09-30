@@ -2,7 +2,7 @@ import { memo } from 'react';
 import Box from '@mui/material/Box';
 import { useTheme } from '@mui/material/styles';
 import FlagIcon from '@mui/icons-material/Flag';
-import BoltIcon from '@mui/icons-material/Bolt';
+import MineIcon from './MineIcon.jsx';
 
 // Digit colors tuned for the dark field: light enough to clear AA contrast
 // against the revealed-cell backdrop without glowing.
@@ -42,7 +42,7 @@ function CellButton({
     let content = null;
     if (isVisible) {
         if (isMine) {
-            content = <BoltIcon sx={{ fontSize: 'calc(var(--cell) * 0.57)' }} />;
+            content = <MineIcon size="calc(var(--cell) * 0.66)" />;
         } else if (neighborMines > 0) {
             content = neighborMines;
         }
@@ -185,8 +185,10 @@ function CellButton({
                 },
             }}
         >
+            {/* The glyph inherits currentColor, so the detonated mine reads
+                white on red and the others read red on the tint. */}
             {isMine && isVisible ? (
-                <Box sx={{ color: isExploded ? '#fff' : 'error.main', display: 'flex' }}>
+                <Box sx={{ color: isExploded ? 'common.white' : 'error.main', display: 'flex' }}>
                     {content}
                 </Box>
             ) : content}

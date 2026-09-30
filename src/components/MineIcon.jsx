@@ -1,14 +1,16 @@
 /**
- * A small mine glyph for the mine counter.
+ * A mine glyph: a spiked ball.
  *
- * MUI has no `Bomb` icon, so this is drawn here to match the weight of the
- * `Bolt` icon used on revealed mines. It is decorative: the meaning is carried
- * by the counter's own `aria-label`, so it stays out of the a11y tree and
- * inherits its colour from its wrapper.
+ * MUI has no `Bomb` icon, so it is drawn here. Used for revealed mines on the
+ * board and beside the mine counter, so both read as the same object.
+ *
+ * `size` accepts any CSS length, including a `calc()` against the board's
+ * `--cell` variable, which is how cells scale their mine glyph.
+ *
+ * Decorative: the meaning is carried by the caller's `aria-label`, so it stays
+ * out of the accessibility tree and inherits its colour from its wrapper.
  */
-export default function MineIcon({ size = 18, ...rest }) {
-    const color = 'currentColor';
-
+export default function MineIcon({ size = 18, color = 'currentColor', ...rest }) {
     return (
         <svg
             width={size}
@@ -17,20 +19,21 @@ export default function MineIcon({ size = 18, ...rest }) {
             fill="none"
             aria-hidden="true"
             focusable="false"
+            style={{ display: 'block', color }}
             {...rest}
         >
-            {/* spikes */}
+            {/* Fuse and spikes, radiating from a solid body. */}
             <g stroke={color} strokeWidth="2" strokeLinecap="round">
-                <path d="M12 2v4" />
-                <path d="M12 18v4" />
-                <path d="M2 12h4" />
-                <path d="M18 12h4" />
-                <path d="M4.9 4.9l2.9 2.9" />
-                <path d="M16.2 16.2l2.9 2.9" />
-                <path d="M19.1 4.9l-2.9 2.9" />
-                <path d="M7.8 16.2l-2.9 2.9" />
+                <path d="M12 2.5v3.5" />
+                <path d="M12 18v3.5" />
+                <path d="M2.5 12H6" />
+                <path d="M18 12h3.5" />
+                <path d="M5.2 5.2l2.5 2.5" />
+                <path d="M16.3 16.3l2.5 2.5" />
+                <path d="M18.8 5.2l-2.5 2.5" />
+                <path d="M7.7 16.3l-2.5 2.5" />
             </g>
-            <circle cx="12" cy="12" r="5.2" fill={color} />
+            <circle cx="12" cy="12" r="5" fill={color} />
         </svg>
     );
 }

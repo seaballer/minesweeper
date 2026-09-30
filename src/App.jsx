@@ -65,11 +65,23 @@ export default function App() {
                             // the visible glyphs half of that left of centre.
                             // Indenting by the other half re-centres them.
                             textIndent: '0.11em',
+                            // The gradient is painted as a background sized to
+                            // the glyphs. Without an explicit `background-size`
+                            // it is sized to the element box, and zooming in
+                            // Chrome resamples that cached bitmap instead of
+                            // repainting it, which visibly breaks the fill.
                             backgroundImage: `linear-gradient(180deg, ${theme.wordmark.top} 0%, ${theme.wordmark.mid} 55%, ${theme.wordmark.bottom} 100%)`,
-                            WebkitBackgroundClip: 'text',
+                            backgroundSize: '100% 100%',
                             backgroundClip: 'text',
-                            color: 'transparent',
-                            textShadow: `0 0 28px ${theme.wordmark.glow}`,
+                            WebkitBackgroundClip: 'text',
+                            // Repaint on zoom rather than reusing a scaled
+                            // texture layer.
+                            willChange: 'transform',
+                            transform: 'translateZ(0)',
+                            // Fallback for engines without background-clip:
+                            // text stays readable in a flat colour.
+                            color: theme.wordmark.top,
+                            WebkitTextFillColor: 'transparent',
                         }}
                     >
                         Minesweeper
@@ -81,25 +93,37 @@ export default function App() {
                     onDifficultyChange={changeDifficulty}
                 />
 
-                <ControlBar
-                    minesRemaining={minesRemaining}
-                    allMinesFlagged={allMinesFlagged}
-                    elapsed={elapsed}
-                    timerRunning={timerRunning}
-                    onReset={reset}
-                />
-
                 {difficulty.key === CUSTOM_KEY && (
                     <CustomSettings value={customSize} onApply={applyCustomSize} />
                 )}
 
                 <StatusBanner status={status} />
 
-                {/* Scrolls only if a board exceeds the available width, which
-                    means an oversized custom board or a narrow phone. Cells
-                    themselves never shrink. */}
+                {/* Readouts and board share one centred column, so the counter
+                    lines up with the first column of cells and the timer with
+                    the last, at any board size. Scrolls as a unit if a board
+                    exceeds the available width, which means an oversized custom
+                    board or a narrow phone. Cells themselves never shrink. */}
                 <Box sx={{ overflowX: 'auto', pb: 1 }}>
-                    <Box sx={{ display: 'flex', justifyContent: 'center', minWidth: 'fit-content' }}>
+                    <Box
+                        sx={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'stretch',
+                            justifyContent: 'center',
+                            width: 'fit-content',
+                            minWidth: 'fit-content',
+                            mx: 'auto',
+                        }}
+                    >
+                        <ControlBar
+                            minesRemaining={minesRemaining}
+                            allMinesFlagged={allMinesFlagged}
+                            elapsed={elapsed}
+                            timerRunning={timerRunning}
+                            onReset={reset}
+                        />
+
                         <Board
                             grid={grid}
                             onReveal={reveal}

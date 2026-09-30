@@ -212,6 +212,30 @@ check('board is a group not a malformed grid',
         !!(counter && timer && resetBtn)
         && !!(counter.compareDocumentPosition(resetBtn) & 4)
         && !!(resetBtn.compareDocumentPosition(timer) & 4));
+    // Readouts and board share one centred column, which is what makes the
+    // counter track the first column of cells and the timer the last.
+    check('readouts share an ancestor with the board', (() => {
+        let n = counter;
+        while (n) {
+            if (n.contains(board)) return true;
+            n = n.parentElement;
+        }
+        return false;
+    })());
+    // The ControlBar grid and the board must be siblings inside one shared
+    // column, so that column's width (sized to the board) governs both and the
+    // counter tracks the first cell column while the timer tracks the last.
+    check('readout grid and board are siblings in one column', (() => {
+        // Walk up from the counter to the nearest grid (the ControlBar root).
+        let grid = counter;
+        while (grid && dom.window.getComputedStyle(grid).display !== 'grid') {
+            grid = grid.parentElement;
+        }
+        const column = grid?.parentElement;
+        return !!grid && !!column && !!board
+            && grid.parentElement === board.parentElement
+            && column.contains(grid) && column.contains(board);
+    })());
     check('reset advertises its shortcut', resetBtn?.getAttribute('aria-keyshortcuts') === 'R',
         resetBtn?.getAttribute('aria-keyshortcuts'));
 
@@ -222,7 +246,19 @@ check('board is a group not a malformed grid',
     const titleCss = dom.window.getComputedStyle(title);
     check('title is uppercase', titleCss.textTransform === 'uppercase', titleCss.textTransform);
     check('title is gradient-clipped', titleCss.backgroundClip === 'text', titleCss.backgroundClip);
-    check('title fill is transparent', titleCss.color === 'rgba(0, 0, 0, 0)', titleCss.color);
+    // Explicitly sized, so a browser zoom repaints the gradient instead of
+    // resampling a cached bitmap of it.
+    check('title background is sized to the glyphs',
+        titleCss.backgroundSize === '100% 100%', titleCss.backgroundSize);
+    // jsdom may report the keyword or resolve it to a zero-alpha colour.
+    check('title fill is transparent via text-fill',
+        titleCss.webkitTextFillColor === 'transparent'
+        || titleCss.webkitTextFillColor === 'rgba(0, 0, 0, 0)',
+        titleCss.webkitTextFillColor);
+    // `color` stays a real value so the title stays readable where
+    // background-clip is unsupported, rather than vanishing.
+    check('title keeps a readable fallback colour',
+        titleCss.color === 'rgb(255, 255, 255)', titleCss.color);
     // Trailing tracking skews a centred word to the right; the indent must be
     // exactly half of it to compensate.
     const spacing = parseFloat(titleCss.letterSpacing) || 0;

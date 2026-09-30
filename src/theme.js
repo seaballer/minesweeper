@@ -32,12 +32,12 @@ const theme = createTheme({
         border: 'rgba(255,255,255,0.07)',
     },
     mono: '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace',
-    // Gradient stops for the MINESWEEPER wordmark.
+    // Gradient stops for the MINESWEEPER wordmark. `top` doubles as the
+    // fallback text colour when background-clip: text is unsupported.
     wordmark: {
         top: '#ffffff',
         mid: '#cfe0f5',
         bottom: '#7d9cc4',
-        glow: 'rgba(74,158,255,0.18)',
     },
     typography: {
         fontFamily: '"Space Grotesk", system-ui, -apple-system, sans-serif',

@@ -5,12 +5,13 @@ import CellButton from './CellButton.jsx';
 // harness can import the same numbers instead of hand-copying them.
 const GAP = 3;
 const PAD = 16;
+const BORDER = 1;
 // Board padding (2 * PAD) plus its 1px border on each side.
-const BOARD_CHROME = PAD * 2 + 2;
+const BOARD_CHROME = PAD * 2 + BORDER * 2;
 // Fixed cell edge length. Constant across every board size on purpose.
 const CELL = 30;
 
-export { GAP, BOARD_CHROME, CELL };
+export { GAP, BOARD_CHROME, PAD, BORDER, CELL };
 
 /**
  * The board itself: a fixed grid of cells, one click handler per input.
