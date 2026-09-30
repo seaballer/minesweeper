@@ -870,6 +870,176 @@ check(
     );
 }
 
+// --- 1x1 and other degenerate boards ---
+{
+    // The constructor must always leave one safe cell, or the opening click has
+    // nowhere to land and the board is unwinnable before it starts.
+    check('1x1 with 1 mine requested becomes 0 mines', new Grid(1, 1, 1, 1).mineCount === 0);
+    check(
+        '1x1 is winnable',
+        (() => {
+            const g = new Grid(1, 1, 1, 1);
+            return g.revealCell(0, 0) === 'win';
+        })()
+    );
+    check('mineCount is clamped to cells minus one', new Grid(2, 2, 99).mineCount === 3);
+    check('a negative mine count floors at zero', new Grid(2, 2, -5).mineCount === 0);
+
+    let lostFirst = 0;
+    for (const [r, c] of [
+        [1, 1],
+        [1, 5],
+        [5, 1],
+        [2, 2],
+        [3, 7],
+        [9, 9],
+    ]) {
+        for (const mc of [0, 1, 5, 99]) {
+            if (new Grid(r, c, mc).revealCell(0, 0) === 'gameover') lostFirst++;
+        }
+    }
+    check('no board loses on its first click', lostFirst === 0, `${lostFirst} lost`);
+}
+
+// --- Long-press to flag on touch ---
+{
+    await act(async () => {
+        $$('button')
+            .find((b) => b.textContent.trim() === 'Beginner')
+            .click();
+    });
+    const before = counter();
+    const target = cells().find((c) => /hidden/.test(c.getAttribute('aria-label') || ''));
+    const touch = (el, type) =>
+        el.dispatchEvent(new dom.window.Event(type, { bubbles: true, cancelable: true }));
+
+    // A short press is just a tap and must not flag.
+    await act(async () => {
+        touch(target, 'touchstart');
+        await new Promise((r) => setTimeout(r, 120));
+        touch(target, 'touchend');
+    });
+    check('a short tap does not flag', counter() === before, `${before} -> ${counter()}`);
+
+    // A press held past the threshold flags.
+    await act(async () => {
+        touch(target, 'touchstart');
+        await new Promise((r) => setTimeout(r, 700));
+        touch(target, 'touchend');
+    });
+    check(
+        'a long press flags',
+        /flagged/.test(target.getAttribute('aria-label') || ''),
+        target.getAttribute('aria-label')
+    );
+    const afterPress = counter();
+    check(
+        'long press decrements the counter',
+        Number(afterPress) === Number(before) - 1,
+        `${before} -> ${afterPress}`
+    );
+
+    // The click/contextmenu some browsers send after a long press must not
+    // toggle the flag straight back off.
+    await act(async () => {
+        target.dispatchEvent(
+            new dom.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true })
+        );
+    });
+    check(
+        'the follow-up contextmenu does not unflag',
+        /flagged/.test(target.getAttribute('aria-label') || ''),
+        target.getAttribute('aria-label')
+    );
+
+    // Moving the finger means scrolling, not pressing.
+    const scroller = cells().find((c) => /hidden/.test(c.getAttribute('aria-label') || ''));
+    const beforeScroll = counter();
+    await act(async () => {
+        touch(scroller, 'touchstart');
+        await new Promise((r) => setTimeout(r, 120));
+        touch(scroller, 'touchmove');
+        await new Promise((r) => setTimeout(r, 500));
+        touch(scroller, 'touchend');
+    });
+    check(
+        'moving the finger cancels the press',
+        counter() === beforeScroll,
+        `${beforeScroll} -> ${counter()}`
+    );
+}
+
+// --- Seed input in the custom panel ---
+{
+    await act(async () => {
+        $$('button')
+            .find((b) => b.textContent.trim() === 'Custom')
+            .click();
+    });
+    check(
+        'the custom panel is open with a seed field',
+        $$('input[type="number"]').length === 4,
+        `${$$('input[type="number"]').length} fields`
+    );
+
+    // Set an explicit size so this block does not depend on whatever custom
+    // config an earlier test left applied -- the panel correctly remembers it.
+    const nums = $$('input[type="number"]');
+    check('the seed field starts blank', nums[3]?.value === '', `"${nums[3]?.value}"`);
+    await act(async () => {
+        setNative(nums[0], '6');
+        setNative(nums[1], '7');
+        setNative(nums[2], '5');
+        setNative(nums[3], '4242');
+    });
+    await act(async () => {
+        $$('button')
+            .find((b) => b.textContent.trim() === 'Apply')
+            .click();
+    });
+    check('a 6x7/5 custom board applied', counter() === '005', `got "${counter()}"`);
+
+    // Mines only appear in the labels once the board is finished, so play each
+    // board out before reading the layout off it.
+    const playOut = async () => {
+        // Reset, then open from the same cell each time so a pinned seed has a
+        // chance to match. Separate act calls: nesting them lets a stale cell
+        // reference survive the re-render.
+        await act(async () => {
+            byText('Reset').click();
+        });
+        await act(async () => {
+            cells()[0].click();
+        });
+        for (let i = 0; i < cells().length; i++) {
+            const c = cells()[i];
+            if (!c || c.disabled) continue;
+            await act(async () => {
+                c.click();
+            });
+            if (($('[role="status"][aria-live]')?.textContent || '').length > 0) break;
+        }
+        return cells()
+            .map((c) => (/, mine\b/.test(c.getAttribute('aria-label') || '') ? '1' : '0'))
+            .join('');
+    };
+
+    const seeded = await playOut();
+    check(
+        'a seeded board is fully revealed at game over',
+        seeded.split('').filter((x) => x === '1').length === 5,
+        `${seeded.split('').filter((x) => x === '1').length} mines exposed`
+    );
+    const replayed = await playOut();
+    check('a seeded board replays through the UI', replayed === seeded);
+
+    await act(async () => {
+        $$('button')
+            .find((b) => b.textContent.trim() === 'Beginner')
+            .click();
+    });
+}
+
 check(
     'every status path returns a string, never undefined',
     (() => {
@@ -1068,7 +1238,8 @@ check(
 }
 
 const numFields = $$('input[type="number"]');
-check('three numeric fields exist', numFields.length === 3, `${numFields.length} found`);
+// rows, cols, mines, seed.
+check('four numeric fields exist', numFields.length === 4, `${numFields.length} found`);
 await act(async () => {
     setNative(numFields[0], '5');
 });

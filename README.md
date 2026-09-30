@@ -18,10 +18,10 @@ npm run dev     # http://localhost:5173
 | Command                | Does                                                  |
 | ---------------------- | ----------------------------------------------------- |
 | `npm run dev`          | Dev server with hot reload                            |
-| `npm run build`        | Production bundle into `dist/`                        |
+| `npm run build`        | Production bundle into`dist/`                         |
 | `npm run preview`      | Serve the built bundle                                |
 | `npm test`             | Mounts the UI in jsdom and drives it (172 assertions) |
-| `npm run lint`         | ESLint, `react-hooks` rules included                  |
+| `npm run lint`         | ESLint,`react-hooks` rules included                   |
 | `npm run format`       | Prettier, writes in place                             |
 | `npm run format:check` | Prettier, reports only                                |
 
@@ -196,16 +196,22 @@ Presets, as rows × cols and mines:
 | Left click                                     | Reveal a cell                                     |
 | Right click                                    | Flag a cell, or remove a flag                     |
 | Click / middle click / right click on a number | Chord — reveal its neighbors once the flags match |
-| `f`                                            | Flag the focused cell                             |
-| `c`                                            | Chord the focused cell                            |
+| `F`                                            | Flag the focused cell                             |
+| `C`                                            | Chord the focused cell                            |
 | `R`                                            | Reset                                             |
 
 `R` stands down while the controls popover is open, and while focus is in a
 board-size field, so it can't wipe a game you're in the middle of typing into.
 
-Custom takes rows, columns, and mines, defaulting to 12 × 14 / 25. Input is
-clamped to 2–30 in each dimension and to at most `rows × cols - 1` mines, so a
-board always has a safe first click. Enter or Apply commits it.
+Custom takes rows, columns, mines, and an optional seed, defaulting to
+12 × 14 / 25 with no seed. Input is clamped to 2–30 in each dimension and to at
+most `rows × cols - 1` mines, so a board always has a safe first click. Enter or
+Apply commits it.
+
+**Seed.** Leave it blank for a random board that changes every reset. Enter a
+number to pin the layout: reset then replays exactly the same board, and anyone
+with the same seed, size, and mine count gets the identical board. The seed is
+part of the custom config, so switching to a preset and back restores it.
 
 ## Engineering notes
 
@@ -236,10 +242,10 @@ An empty string means the value was rejected. `npm test` asserts this too.
 separate:
 
 - `canReveal` — hidden and unflagged: left click reveals
-- `canFlag` — hidden, flagged or not: right click or `f` toggles the flag, so a
+- `canFlag` — hidden, flagged or not: right click or `F` toggles the flag, so a
   misplaced flag comes off without reaching for Reset
 - `canChord` — revealed, safe, and numbered: click, middle click, right click,
-  or `c` chords
+  or `C` chords
 
 Conflating them broke flag removal once already.
 
@@ -284,23 +290,17 @@ function components, 4-space indent. Styling is MUI `sx` against tokens from
 
 ## Known limitations
 
-- **Flagging needs a right click or `f`.** There's no touch gesture for it yet,
-  so the game is hard to play on a phone.
 - **The wordmark is a flat colour.** `background-clip: text` rendered
   incorrectly at some browser zoom levels, so the gradient is commented out in
   `src/App.jsx` until there's a better treatment.
-- **A 1×1 board with 1 mine loses on the first click.** Excluding the opening
-  cell would leave no candidates, so `placeMines` drops the exclusion rather
-  than under-fill the board. Unavoidable, and unreachable from the UI:
-  `CUSTOM_LIMITS` starts at 2×2.
+- **Long-press cancels on scroll.** The press that flags a cell is aborted as
+  soon as a finger moves, so scrolling a wide board never places a stray flag
+  by accident.
 
 ## To-do
 
-- [ ] Long-press to flag on touch devices
-- [ ] Add a seed input for shareable, reproducible boards
 - [ ] Persist best times per difficulty
 - [ ] Keyboard navigation and focus management across the board
 - [ ] `node:test` unit tests for the model: `placeMines` determinism and exact
       mine count, `countNeighborMines` correctness, flood fill boundaries, win
       detection
-- [ ] Cover the remaining edge cases: the 1×1/1-mine board

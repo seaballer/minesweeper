@@ -28,16 +28,21 @@ export default function CustomSettings({ value, onApply }) {
         rows: String(value.rows),
         cols: String(value.cols),
         mineCount: String(value.mineCount),
+        // Blank means a random board. `String(undefined)` would render the
+        // literal text "undefined" in the field.
+        seed: value.seed === undefined ? '' : String(value.seed),
     });
 
     const preview = resolveCustom(draft, value);
     // Compare resolved values, not the raw strings: typing "016" against an
     // applied "16" is not a change, and Enter would otherwise re-apply
     // the same board.
+    const draftSeed = draft.seed.trim() === '' ? undefined : Number.parseInt(draft.seed, 10);
     const dirty =
         preview.rows !== value.rows ||
         preview.cols !== value.cols ||
-        preview.mineCount !== value.mineCount;
+        preview.mineCount !== value.mineCount ||
+        draftSeed !== value.seed;
 
     // A plain object style, so Emotion can't be relied on for vendor or
     // pseudo-element selectors here. `CSS-in-JS-with-@` would allow nesting,
@@ -67,7 +72,7 @@ export default function CustomSettings({ value, onApply }) {
         }
     `;
 
-    const field = (name, label, min, max) => (
+    const field = (name, label, min, max, optional = false) => (
         <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             <Typography variant="caption" color="text.secondary">
                 {label}
@@ -94,7 +99,9 @@ export default function CustomSettings({ value, onApply }) {
                             setDraft((d) => ({ ...d, [name]: String(max) }));
                             return;
                         }
-                        if (min !== undefined && parsed < min) {
+                        // The seed may legitimately be left blank, which is
+                        // "random board", so it is not snapped up to a minimum.
+                        if (min !== undefined && parsed < min && !optional) {
                             setDraft((d) => ({ ...d, [name]: String(min) }));
                             return;
                         }
@@ -137,6 +144,13 @@ export default function CustomSettings({ value, onApply }) {
     // needs one safe cell, or the first click can never be safe.
     const maxMines = Math.max(CUSTOM_LIMITS.minMines, preview.rows * preview.cols - 1);
 
+    // Seed is optional: blank means a random board that changes on reset.
+    // A value pins the layout, so the same board can be shared and replayed.
+    const seedPreview = draft.seed.trim() === '' ? undefined : Number.parseInt(draft.seed, 10);
+    const seedValid =
+        draft.seed.trim() === '' ||
+        (Number.isInteger(seedPreview) && seedPreview >= CUSTOM_LIMITS.minSeed);
+
     return (
         <Box
             sx={{
@@ -157,12 +171,13 @@ export default function CustomSettings({ value, onApply }) {
             {field('rows', 'Rows', CUSTOM_LIMITS.minRows, CUSTOM_LIMITS.maxRows)}
             {field('cols', 'Cols', CUSTOM_LIMITS.minCols, CUSTOM_LIMITS.maxCols)}
             {field('mineCount', 'Mines', CUSTOM_LIMITS.minMines, maxMines)}
+            {field('seed', 'Seed', CUSTOM_LIMITS.minSeed, CUSTOM_LIMITS.maxSeed, true)}
 
             <Button
                 size="small"
                 variant="contained"
-                disabled={!dirty}
-                onClick={() => onApply(preview)}
+                disabled={!dirty || !seedValid}
+                onClick={() => onApply({ ...preview, seed: seedPreview })}
                 sx={{ minWidth: 84, textTransform: 'none' }}
             >
                 Apply
@@ -171,6 +186,8 @@ export default function CustomSettings({ value, onApply }) {
             <Typography variant="caption" color="text.secondary" sx={{ ml: 'auto', pb: 0.5 }}>
                 {preview.rows}×{preview.cols} · {preview.mineCount} mines
                 {adjusted && ' (adjusted)'}
+                {!seedValid && ' · seed must be a number'}
+                {seedPreview !== undefined && seedValid && ` · seed ${seedPreview} (pinned)`}
             </Typography>
         </Box>
     );

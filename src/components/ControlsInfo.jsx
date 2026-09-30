@@ -13,6 +13,7 @@ import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 const CONTROLS = [
     ['Left click', 'Reveal a cell'],
     ['Right click', 'Flag a cell, or remove a flag'],
+    ['Long press', 'Flag a cell, for touch screens'],
     ['Click a number', 'Chord — reveal its neighbors once the flags around it add up'],
     ['Middle click', 'Chord, same as clicking a number'],
 ];

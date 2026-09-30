@@ -25,6 +25,10 @@ export const CUSTOM_LIMITS = {
     minCols: 2,
     maxCols: 30,
     minMines: 1,
+    // Seeds are pinned through mulberry32, which coerces to uint32, so any
+    // non-negative integer up to 2^32-1 is meaningful and reproducible.
+    minSeed: 0,
+    maxSeed: 4294967295,
 };
 
 export const DEFAULT_CUSTOM = { rows: 12, cols: 14, mineCount: 25 };

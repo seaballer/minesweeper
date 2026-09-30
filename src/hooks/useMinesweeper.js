@@ -18,6 +18,8 @@ import { useTimer } from './useTimer.js';
 export function useMinesweeper(initialDifficulty = DEFAULT_DIFFICULTY) {
     const [difficultyKey, setDifficultyKey] = useState(initialDifficulty);
     // Only meaningful for the `custom` difficulty; presets read from DIFFICULTIES.
+    // `seed` is undefined for a random board, or a number that pins the layout
+    // so it can be shared and replayed.
     const [customSize, setCustomSize] = useState(DEFAULT_CUSTOM);
     const [version, setVersion] = useState(0);
     // Bumped on every new board so the timer knows to zero itself.
@@ -25,8 +27,13 @@ export function useMinesweeper(initialDifficulty = DEFAULT_DIFFICULTY) {
 
     const grid = useMemo(() => {
         const preset = DIFFICULTIES[difficultyKey];
-        const { rows, cols, mineCount } = preset.isCustom ? customSize : preset;
-        const instance = new Grid(rows, cols, mineCount);
+        if (preset.isCustom) {
+            const { rows, cols, mineCount, seed } = customSize;
+            const instance = new Grid(rows, cols, mineCount, seed);
+            instance.initialize();
+            return instance;
+        }
+        const instance = new Grid(preset.rows, preset.cols, preset.mineCount);
         instance.initialize();
         return instance;
     }, [difficultyKey, customSize]);
@@ -103,7 +110,10 @@ export function useMinesweeper(initialDifficulty = DEFAULT_DIFFICULTY) {
         // is memoized on `customSize` by reference, so a fresh object for an
         // unchanged size would rebuild the grid and reset the game.
         setCustomSize((prev) =>
-            prev.rows === size.rows && prev.cols === size.cols && prev.mineCount === size.mineCount
+            prev.rows === size.rows &&
+            prev.cols === size.cols &&
+            prev.mineCount === size.mineCount &&
+            prev.seed === size.seed
                 ? prev
                 : size
         );

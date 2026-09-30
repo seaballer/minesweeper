@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import Box from '@mui/material/Box';
 import { useTheme } from '@mui/material/styles';
 import FlagIcon from '@mui/icons-material/Flag';
@@ -17,6 +17,9 @@ const NUMBER_COLORS = {
     7: '#e8ecf1',
     8: '#8b96a5',
 };
+
+// Long enough not to fire on a tap, short enough not to feel sluggish.
+const LONG_PRESS_MS = 450;
 
 /**
  * A single board cell.
@@ -96,7 +99,54 @@ function CellButton({
     const canChord = !disabled && isVisible && !isMine && neighborMines > 0;
     const interactive = canReveal || canChord;
 
+    // Long-press flags on touch, where there is no right click. A press that
+    // already flagged must not also fire the click or contextmenu that some
+    // browsers send afterwards, or the flag toggles straight back off.
+    const longPressTimer = useRef(null);
+    const longPressFired = useRef(false);
+    const [pressing, setPressing] = useState(false);
+
+    const clearLongPress = useCallback(() => {
+        if (longPressTimer.current !== null) {
+            clearTimeout(longPressTimer.current);
+            longPressTimer.current = null;
+        }
+    }, []);
+
+    // A pending timer must not fire into a cell that has since unmounted.
+    useEffect(() => clearLongPress, [clearLongPress]);
+
+    const startLongPress = useCallback(() => {
+        if (!canFlag) {
+            return;
+        }
+        longPressFired.current = false;
+        setPressing(true);
+        longPressTimer.current = setTimeout(() => {
+            longPressTimer.current = null;
+            longPressFired.current = true;
+            setPressing(false);
+            onFlag(row, col);
+        }, LONG_PRESS_MS);
+    }, [canFlag, onFlag, row, col]);
+
+    const endLongPress = useCallback(() => {
+        clearLongPress();
+        setPressing(false);
+    }, [clearLongPress]);
+
+    const consumeLongPress = useCallback(() => {
+        if (!longPressFired.current) {
+            return false;
+        }
+        longPressFired.current = false;
+        return true;
+    }, []);
+
     const act = () => {
+        if (consumeLongPress()) {
+            return;
+        }
         if (canReveal) {
             onReveal(row, col);
         } else if (canChord) {
@@ -122,6 +172,12 @@ function CellButton({
                 }
             }}
             onContextMenu={(event) => {
+                // A long press already flagged this cell; swallow the
+                // contextmenu some mobile browsers fire after one.
+                if (consumeLongPress()) {
+                    event.preventDefault();
+                    return;
+                }
                 // Right click flags an unflagged cell and removes a flag. On a
                 // revealed number it chords, since that is the gesture people
                 // already know from Windows Minesweeper.
@@ -133,6 +189,11 @@ function CellButton({
                     onChord(row, col);
                 }
             }}
+            onTouchStart={startLongPress}
+            onTouchEnd={endLongPress}
+            // Moving the finger means the user is scrolling, not pressing.
+            onTouchMove={endLongPress}
+            onTouchCancel={endLongPress}
             onKeyDown={(event) => {
                 // 'f' is the keyboard equivalent of right-click, and 'c' the
                 // equivalent of chording, so the game is playable without a
@@ -172,7 +233,12 @@ function CellButton({
                 // A short pop is the one moment of motion worth having: it
                 // makes a cascade of revealed cells read as a sequence.
                 transition: 'transform 90ms ease-out, background-color 140ms ease',
-                transform: raised ? 'none' : 'scale(0.96)',
+                // Sinks while held, which is the only feedback a touch user
+                // gets that a press registered before the long-press fires.
+                transform: pressing ? 'scale(0.92)' : raised ? 'none' : 'scale(0.96)',
+                // Drops the 300ms tap delay without disabling panning, so the
+                // board can still be scrolled on a phone.
+                touchAction: 'manipulation',
                 color:
                     isVisible && !isMine
                         ? (NUMBER_COLORS[neighborMines] ?? 'text.primary')

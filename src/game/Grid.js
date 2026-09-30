@@ -23,7 +23,12 @@ export class Grid {
     constructor(rows, cols, mineCount, seed) {
         this.rows = rows;
         this.cols = cols;
-        this.mineCount = Math.min(mineCount, rows * cols);
+        // Clamped to leave one safe cell. Mines are placed on the first click
+        // and that cell is excluded, so a board needs a spare cell or the
+        // opening move has nowhere safe to land and the game is unwinnable
+        // before it starts. This is what makes a 1x1 board with 1 requested
+        // mine become a 1x1 board with none, rather than an instant loss.
+        this.mineCount = Math.max(0, Math.min(mineCount, rows * cols - 1));
         // A seed passed by the caller means "this exact board": it is pinned so
         // reset replays it and the board stays shareable. No seed means the
         // board is random, so reset draws a new one.
@@ -82,19 +87,13 @@ export class Grid {
     // sampling without the retry loop.
     //
     // When safeRow/safeCol are in bounds that cell is left out of the
-    // candidate list, so it cannot be mined. If excluding it would leave too
-    // few cells to satisfy mineCount (e.g. a 1x1 board with 1 mine), the
-    // exclusion is dropped rather than under-filling the board.
+    // candidate list, so it cannot be mined. The constructor guarantees
+    // mineCount <= total - 1, so there is always room for the exclusion and no
+    // fallback is needed.
     placeMines(safeRow, safeCol) {
-        const total = this.rows * this.cols;
-        const canExclude = total - 1 >= this.mineCount;
         const safePosition = safeRow * this.cols + safeCol;
         const safeInBounds =
-            canExclude &&
-            safeRow >= 0 &&
-            safeRow < this.rows &&
-            safeCol >= 0 &&
-            safeCol < this.cols;
+            safeRow >= 0 && safeRow < this.rows && safeCol >= 0 && safeCol < this.cols;
 
         const positions = [];
         for (let i = 0; i < this.rows; i++) {
