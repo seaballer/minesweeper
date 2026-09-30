@@ -93,7 +93,8 @@ An empty string means the value was rejected. `npm test` asserts this too.
 ## `Grid` contracts worth knowing before you call it
 
 - The constructor allocates cells and `initialize()` resets them, but **neither places mines**. Placement is deferred to the first `revealCell` via `ensureMinesPlaced`, so the opening click is always safe. Until then the board has no mines and all `neighborMines` are 0.
-- `revealCell(row, col)` returns `"playing" | "win" | "gameover"`, but returns **`undefined`** when the cell is already visible or is flagged. Don't assume a string back.
+- `revealCell(row, col)` **always returns a status string** (`ready` / `playing` / `win` / `gameover`) and never `undefined`. A no-op — already-visible or flagged cell — returns the current status, because the board is unchanged. `chord` follows the same rule.
+- Seeds: a seed passed to the constructor is **pinned**, so `initialize()` replays that exact board. No seed means unpinned, and `initialize()` advances it, so reset yields a new board. Don't "simplify" this into one seed field — resetting a pinned grid is what makes a board shareable.
 - `grid.status` is `"ready" | "playing" | "win" | "gameover"`. Once `win` or `gameover`, the game is terminal: further `revealCell` calls return that status and don't change the board.
 - Flood fill skips flagged and mined cells, and doesn't expand through them.
 - On a 1×1 board with 1 mine there is no safe first cell, so the opening click loses. Unavoidable, not a bug — but `CUSTOM_LIMITS` starts at 2×2 so the custom UI can't produce one.
@@ -101,7 +102,7 @@ An empty string means the value was rejected. `npm test` asserts this too.
 - `remainingSafeCells` only decrements when `Cell.reveal()` returns `true`. Win is an exact `=== 0` check.
 - `revealAllMines(explodedRow, explodedCol)` uncovers every mine. On a loss it marks the whole **connected** mine cluster around the detonation (mine → adjacent mine → …) as `isExploded`, not just the clicked cell — after a chording detonation, one red cell among grey ones reads as if the neighbours were safe. On a win nothing is marked.
 - `chord(row, col)` reveals the hidden neighbors of a revealed number once its flagged-neighbor count matches. It no-ops on zero cells, hidden cells, mines, and mismatched flag counts, and delegates each reveal to `revealCell` so `remainingSafeCells` and flood fill stay owned by one code path. Chording is still a guess: flagging a safe cell and leaving the real mine unflagged will detonate it.
-- `placeMines` is a seeded Fisher-Yates shuffle (`mulberry32`). Pass a seed for a reproducible board. `mineCount` is clamped to `rows * cols`.
+- `placeMines` is a seeded Fisher-Yates shuffle (`mulberry32`). `mineCount` is clamped to `rows * cols`.
 
 ## Cell gestures
 

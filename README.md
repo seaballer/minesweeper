@@ -52,13 +52,21 @@ The model layer is deliberately framework-free, so the rules stay testable in No
 
 ### `new Grid(rows, cols, mineCount, seed?)`
 
-Builds the board. The seed is optional — pass one to make a board reproducible:
+Builds the board. The seed is optional and controls what happens on reset:
 
 ```js
-new Grid(9, 9, 10, 1234)  // same seed always yields the same board
+new Grid(9, 9, 10, 1234)  // pinned: this exact board, every time
+new Grid(9, 9, 10)         // random: a new board on every reset
 ```
 
-Omit it and seeds increment from a clock base, so successive boards differ.
+Passing a seed **pins** it. A pinned grid replays the identical mine layout
+every time you reset, so a board can be shared and replayed. Omitting the seed
+leaves it unpinned, and `initialize()` draws a new one each time, so Reset and
+the `R` key always give you a fresh board.
+
+Because mines are placed on your first click, the layout also depends on which
+cell you open with. Two grids with the same seed match only if they start from
+the same cell.
 
 The constructor only allocates cells. `initialize()` resets the board but deliberately does **not** place mines — placement is deferred to the first `revealCell`, which is what makes the opening click safe. Calling `initialize()` on a fresh grid is enough to start:
 
@@ -72,18 +80,22 @@ To inspect a board without playing it, trigger placement directly with `grid.ens
 
 ### `grid.revealCell(row, col)`
 
-Reveals a cell and floods outward through any zero-count cells. Returns the game state, which is also readable at `grid.status`:
+Reveals a cell and floods outward through any zero-count cells. **Always returns
+a status string** — never `undefined`:
 
-| Return value   | Meaning                                           |
-| -------------- | ------------------------------------------------- |
-| `"playing"`  | Reveal succeeded, game continues                  |
-| `"win"`      | Last safe cell revealed                           |
-| `"gameover"` | A mine was revealed                               |
-| `undefined`  | No-op: the cell was already visible or is flagged |
+| Return value   | Meaning                                                        |
+| -------------- | -------------------------------------------------------------- |
+| `"ready"`     | No-op before the first reveal, when the board is still unplaced |
+| `"playing"`   | Reveal succeeded, or a no-op (cell already visible or flagged)  |
+| `"win"`       | Last safe cell revealed                                        |
+| `"gameover"`  | A mine was revealed                                            |
+
+A no-op returns the current status rather than nothing: the board is unchanged,
+so the status is simply whatever it already was. `grid.chord` follows the same
+rule, so neither call needs a special case for `undefined`.
 
 Two rules to be aware of:
 
-- A no-op returns **`undefined`**, not `"playing"`. Check for it explicitly rather than assuming a string.
 - Once `grid.status` is `"win"` or `"gameover"`, further calls return that status without changing the board, so a won game can't be flipped to a loss by clicking a revealed mine.
 
 ### Chording and detonation
@@ -121,7 +133,8 @@ first version have been smoothed out; what remains is noted here.
 - **A game stops accepting input once decided.** After `win` or `gameover`,
   `revealCell` returns the same status and leaves the board alone.
 - **A loss or a win reveals every mine.** The mine that was clicked is marked
-  `isExploded`; the rest are simply uncovered.
+  `isExploded`, and so is every mine touching it — the blast does not stop at
+  one square. The rest are simply uncovered.
 - **Flags are respected by flood fill** — a flagged neighbor is not revealed
   and does not block the expansion.
 - **Out-of-range coordinates throw a `TypeError`** rather than a friendly
@@ -132,6 +145,14 @@ first version have been smoothed out; what remains is noted here.
   number of cells rather than shrinking them, so a Beginner cell is the same
   size as an Expert one. Only oversized custom boards and phones scroll
   horizontally.
+- **Reset draws a new board unless you pinned a seed.** This was a bug: the seed
+  was fixed once in the constructor and never advanced, so every reset replayed
+  the identical mine layout. An explicitly seeded grid is still replayed
+  deliberately, which is what makes a board shareable.
+- **The title gradient is disabled.** `background-clip: text` rendered
+  incorrectly at some browser zoom levels; the code is kept commented out in
+  `src/App.jsx` and the title uses a flat colour until a better treatment is
+  found.
 
 ## To-do
 
@@ -161,7 +182,8 @@ Roughly in the order they'd unblock each other.
 - [x] Reveal all mines on game over (and on win, for a legible final board)
 - [x] Guard `mineCount` against exceeding `rows * cols` (clamped in the constructor)
 - [x] Make a decided game terminal so a win can't become a loss
-- [ ] Decide what `revealCell` should return on a no-op — `undefined` is inconsistent with the documented states
+- [x] `revealCell` and `chord` return the current status on a no-op instead of `undefined`
+- [x] Reset draws a new board unless a seed was pinned
 - [ ] Validate out-of-range coordinates instead of throwing a raw `TypeError`
 
 ### Structure and polish

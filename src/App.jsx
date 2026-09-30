@@ -122,6 +122,9 @@ export default function App() {
                             onReset={reset}
                         />
 
+                        {/* Breathing room so the readouts don't crowd the bezel. */}
+                        <Box sx={{ height: 6 }} />
+
                         <Board
                             grid={grid}
                             onReveal={reveal}

@@ -24,6 +24,10 @@ export class Grid {
         this.rows = rows;
         this.cols = cols;
         this.mineCount = Math.min(mineCount, rows * cols);
+        // A seed passed by the caller means "this exact board": it is pinned so
+        // reset replays it and the board stays shareable. No seed means the
+        // board is random, so reset draws a new one.
+        this.pinnedSeed = seed !== undefined;
         this.seed = seed ?? nextSeed++;
         this.remainingSafeCells = rows * cols - this.mineCount;
         this.cells = this.createGrid();
@@ -34,7 +38,14 @@ export class Grid {
     // Resets to a fresh, unplayed board. Mines are deliberately NOT placed
     // here: they are placed on the first revealCell so the opening click is
     // always safe. See ensureMinesPlaced.
+    //
+    // An unpinned board takes a new seed here. Without this, reset replayed
+    // the identical mine layout every time, because the seed was fixed once in
+    // the constructor and never advanced.
     initialize() {
+        if (!this.pinnedSeed) {
+            this.seed = nextSeed++;
+        }
         this.cells = this.createGrid();
         this.remainingSafeCells = this.rows * this.cols - this.mineCount;
         this.minesPlaced = false;
@@ -130,6 +141,10 @@ export class Grid {
     // as it has adjacent mines, the remaining hidden neighbors are safe and
     // are revealed at once. No-ops otherwise, which is what makes it a guess
     // the player can be wrong about.
+    //
+    // Returns the game status, as revealCell does. A no-op returns the current
+    // status rather than nothing: the board is unchanged, so the status is
+    // simply whatever it already was.
     chord(row, col) {
         if (this.status === "win" || this.status === "gameover") {
             return this.status;
@@ -140,20 +155,20 @@ export class Grid {
         // Only a revealed, safe, numbered cell can be chorded. A zero cell is
         // already covered by flood fill.
         if (!cell.isVisible || cell.isMine || cell.neighborMines === 0) {
-            return;
+            return this.status;
         }
 
         // Mines must already be placed; chording before the first reveal has
         // no flags to compare against.
         if (!this.minesPlaced) {
-            return;
+            return this.status;
         }
 
         const neighbors = this.getNeighbors(row, col);
         const flagged = neighbors.filter(n => n.cell.isFlagged).length;
 
         if (flagged !== cell.neighborMines) {
-            return;
+            return this.status;
         }
 
         for (const n of neighbors) {
@@ -181,6 +196,11 @@ export class Grid {
         }    
     }
 
+    // Always returns the game status: "playing", "win", or "gameover".
+    //
+    // A no-op — the cell is already visible or is flagged — returns the current
+    // status rather than nothing. The board is unchanged, so "playing" is
+    // simply true, and a caller never has to special-case undefined.
     revealCell(row, col) {
         // Once the game is decided it stops accepting input, so a won game
         // can't be flipped to a loss by clicking a revealed mine.
@@ -194,7 +214,7 @@ export class Grid {
         const cell = this.cells[row][col];
 
         if (cell.isVisible || cell.isFlagged) {
-            return;
+            return this.status;
         }
         if (cell.isMine) {
             this.revealAllMines(row, col);

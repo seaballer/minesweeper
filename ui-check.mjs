@@ -469,8 +469,75 @@ wrong.countNeighborMines();
 wrong.minesPlaced = true;
 wrong.cells[0][1].reveal();
 const beforeWrong = wrong.cells.flat().filter((c) => c.isVisible).length;
-check('chord with no flags does nothing', wrong.chord(0, 1) === undefined
+// A no-op returns the current status rather than nothing. Before the first
+    // reveal the game hasn't started, so that status is "ready" -- which is
+    // exactly what this asserts.
+check('chord with no flags changes nothing',
+    wrong.chord(0, 1) === 'ready'
     && wrong.cells.flat().filter((c) => c.isVisible).length === beforeWrong);
+check('revealCell no-op returns the current status', (() => {
+    const n = new Grid(3, 3, 1, 1);
+    n.initialize();
+    n.revealCell(0, 0);
+    return n.revealCell(0, 0) === 'playing';
+})());
+check('revealCell no-op on a flagged cell returns the status', (() => {
+    const n = new Grid(3, 3, 1, 1);
+    n.initialize();
+    n.cells[2][2].toggleFlag();
+    return n.revealCell(2, 2) === 'ready';
+})());
+// Seed lifecycle: a pinned seed replays, an unpinned one advances on reset.
+{
+    const layout = (g) => g.cells.flatMap((r) => r.map((c) => (c.isMine ? 1 : 0))).join('');
+
+    const pinned = new Grid(9, 9, 10, 1234);
+    pinned.initialize();
+    pinned.revealCell(4, 4);
+    const first = layout(pinned);
+    let stable = true;
+    for (let i = 0; i < 20; i++) {
+        pinned.initialize();
+        pinned.revealCell(4, 4);
+        if (layout(pinned) !== first) stable = false;
+    }
+    check('an explicitly seeded board survives reset unchanged', stable);
+
+    const fresh = new Grid(9, 9, 10, 1234);
+    fresh.initialize();
+    fresh.revealCell(4, 4);
+    check('an explicitly seeded board is reproducible', layout(fresh) === first);
+
+    // The bug: reset used to replay the identical layout every time.
+    const auto = new Grid(9, 9, 10);
+    auto.initialize();
+    auto.revealCell(4, 4);
+    const a = layout(auto);
+    auto.initialize();
+    auto.revealCell(4, 4);
+    check('an unseeded board changes on reset', layout(auto) !== a);
+
+    const seen = new Set();
+    for (let i = 0; i < 60; i++) {
+        auto.initialize();
+        auto.revealCell(4, 4);
+        seen.add(layout(auto));
+    }
+    check('repeated resets keep producing new boards', seen.size === 60, `${seen.size}/60 distinct`);
+}
+
+check('every status path returns a string, never undefined', (() => {
+    const n = new Grid(4, 4, 2, 1);
+    n.initialize();
+    const values = [
+        n.revealCell(0, 0),
+        n.revealCell(0, 0),
+        n.chord(0, 0),
+        n.chord(1, 1),
+        n.revealCell(2, 2),
+    ];
+    return values.every((v) => typeof v === 'string');
+})());
 
 // A chordable cell must tell assistive tech the gesture exists. Replay the
 // same board as the model probe so a numbered cell is definitely revealed.
