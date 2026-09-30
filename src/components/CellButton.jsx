@@ -21,6 +21,15 @@ const NUMBER_COLORS = {
 // Long enough not to fire on a tap, short enough not to feel sluggish.
 const LONG_PRESS_MS = 450;
 
+// What a held cell looks like: the key sinking into its own face. This is the
+// only feedback a touch user gets that a press registered before the
+// long-press fires, and it doubles as the mouse `:active` state.
+//
+// It is a shadow, not a scale or a nudge, on purpose. See the note on
+// `transform` in the sx block — a cell that moves or resizes while pressed
+// takes clicks away from itself.
+const PRESSED_SHADOW = 'inset 0 2px 5px rgba(0,0,0,0.55)';
+
 /**
  * A single board cell.
  *
@@ -154,11 +163,64 @@ function CellButton({
         }
     };
 
+    // Set when a press already acted, so the `click` that the browser sends
+    // afterwards does not act a second time. See onPointerDown.
+    const actedOnPress = useRef(false);
+
+    // Act on PRESS, not on click.
+    //
+    // A browser only fires `click` when the mousedown and mouseup targets
+    // agree, and when they disagree it sends the click to their nearest common
+    // ancestor instead. Play a board the way a fast player does — sweeping the
+    // mouse across it and clicking as you go — and the pointer travels several
+    // cells between press and release. Every one of those clicks was dispatched
+    // to the board, so no cell ever heard about it. Measured on a recording of
+    // that: a median 1719 px/sec, about three cells per click, and exactly one
+    // cell revealed across six seconds of clicking — the one click where the
+    // mouse happened to be still.
+    //
+    // `pointerdown` fires on the element the press *started* on, however far the
+    // pointer travels afterwards, so the cell the user aimed at is the one that
+    // acts. It also removes the wait for release, which is what makes the board
+    // feel immediate.
+    const onPointerDown = (event) => {
+        // Touch keeps the long-press path: acting on press would reveal the very
+        // cell the long press exists to flag.
+        if (event.pointerType === 'touch') {
+            return;
+        }
+        // Only the primary button. Right click flags and middle click chords,
+        // both of which are handled by their own handlers below — acting here
+        // too would flag a cell and then reveal or chord it.
+        if (event.button !== 0) {
+            return;
+        }
+        actedOnPress.current = true;
+        act();
+    };
+
+    // Keyboard activation and script-driven clicks still arrive here, and so
+    // does every touch tap and a click the pointer wandered off of. The ref
+    // makes the press-then-click pair act exactly once.
+    const onClick = () => {
+        if (actedOnPress.current) {
+            actedOnPress.current = false;
+            return;
+        }
+        act();
+    };
+
     return (
         <Box
             component="button"
             type="button"
-            onClick={act}
+            onPointerDown={onPointerDown}
+            onPointerLeave={() => {
+                // A press that started here but ended elsewhere gets no click at
+                // all. Drop the flag so the next press is not mistaken for one.
+                actedOnPress.current = false;
+            }}
+            onClick={onClick}
             // Middle click is the conventional chord gesture.
             onAuxClick={(event) => {
                 // Middle click only means something on a chordable number, but
@@ -230,12 +292,24 @@ function CellButton({
                 fontSize: 'calc(var(--cell) * 0.47)',
                 fontWeight: 600,
                 userSelect: 'none',
-                // A short pop is the one moment of motion worth having: it
-                // makes a cascade of revealed cells read as a sequence.
-                transition: 'transform 90ms ease-out, background-color 140ms ease',
-                // Sinks while held, which is the only feedback a touch user
-                // gets that a press registered before the long-press fires.
-                transform: pressing ? 'scale(0.92)' : raised ? 'none' : 'scale(0.96)',
+                // Deliberately NO `transform` anywhere on a cell, in any state.
+                //
+                // A transform does not just look different, it changes what the
+                // browser hit-tests against: a transformed element is hit on its
+                // transformed geometry. This cell used to shrink to `scale(0.96)`
+                // once revealed and nudge to `translateY(1px)` on `:active`, both
+                // transitioned over 90ms. So the cell physically moved and
+                // shrank *while the button was being pressed* — and a browser
+                // dispatches `click` to the nearest common ancestor of the
+                // mousedown and mouseup targets. Move the cell out from under the
+                // cursor mid-click and the click lands on the board instead, and
+                // the cell never hears about it. A flood fill made it far worse:
+                // dozens of cells started shrinking at once, mid-sweep.
+                //
+                // Every effect here is paint-only (background, shadow, colour),
+                // which cannot change a hit box. Reveal feedback is the surface
+                // fading and flattening, not the cell resizing.
+                transition: 'background-color 140ms ease, box-shadow 120ms ease',
                 // Drops the 300ms tap delay without disabling panning, so the
                 // board can still be scrolled on a phone.
                 touchAction: 'manipulation',
@@ -266,15 +340,24 @@ function CellButton({
                 boxShadow: isExploded
                     ? 'inset 0 0 0 1px rgba(255,255,255,0.25)'
                     : raised
-                      ? 'inset 0 1px 0 rgba(255,255,255,0.07), 0 2px 0 rgba(0,0,0,0.35)'
+                      ? pressing
+                          ? PRESSED_SHADOW
+                          : 'inset 0 1px 0 rgba(255,255,255,0.07), 0 2px 0 rgba(0,0,0,0.35)'
                       : 'none',
 
                 ...(interactive && {
                     '&:hover': {
                         backgroundImage: `linear-gradient(180deg, ${theme.board.keyHoverTop} 0%, ${theme.board.keyHoverBottom} 100%)`,
                     },
+                    // Only while the cell is still hidden. The press reveals it,
+                    // so by the time the button is released this cell is flat
+                    // and numbered — a sunk shadow there would just look wrong.
+                    ...(canReveal && {
+                        // Paint-only, for the same reason as everything else
+                        // here: a held button must never change its hit box.
+                        '&:active': { boxShadow: PRESSED_SHADOW },
+                    }),
                 }),
-                '&:active': interactive ? { transform: 'translateY(1px)' } : {},
                 '&:focus-visible': {
                     outline: '2px solid',
                     outlineColor: 'primary.main',

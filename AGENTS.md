@@ -9,7 +9,7 @@ testable outside a browser.
 - `npm run dev` — Vite dev server on <http://localhost:5173>
 - `npm run build` — production bundle into `dist/`
 - `npm run preview` — serve the built bundle
-- `npm test` — mounts the components in jsdom and drives them (198 assertions)
+- `npm test` — mounts the components in jsdom and drives them (212 assertions)
 - `npm run lint` — ESLint (`react-hooks` rules included). Must be clean before committing.
 - `npm run format` / `npm run format:check` — Prettier. The config matches the
   existing style: 4-space indent, single quotes, 100 columns.
@@ -111,20 +111,102 @@ cells and covers the no-op, reset, and out-of-range cases.
 
 ## A note on measuring input
 
-A "clicks aren't registering" report here was chased down to nothing: rapid clicks
-all applied. Two things made it look like loss, and both are traps to avoid
-re-introducing into a probe:
+A "clicks aren't registering" report here spent a long time looking like nothing.
+In jsdom every rapid click applied, latency was flat, DOM node count and Emotion
+class count were flat across repeated games, and per-click cost was sub-millisecond
+at every board size. Every one of those measurements was correct and the board was
+still unusable, because **jsdom dispatches a finished `click` directly and so
+never asks the question the bug was about.** See the section below.
+
+Two probes that made it worse, both worth avoiding:
 
 - Once the game is decided the board correctly ignores clicks, and unvisited safe
   cells keep their `hidden` label at game over. Counting those as dropped input
   invents a bug. Filter on `!cell.disabled` and on the banner being empty.
-- The first click after switching difficulty also renders every cell for the first
-  time (emotion styles, `cell.reveal` state). Timing that one and calling it
-  per-click cost measures JIT warmup, not steady state. Benchmark the median of a
-  run, not a single click.
+- The first click after switching difficulty renders every cell for the first time
+  (emotion styles, reveal state). Timing that one and calling it per-click cost
+  measures JIT warmup, not steady state. Benchmark the median of a run.
+
+What actually settled it: the user recorded the screen, and the recording showed
+a cursor crossing about three cells per click. That is a shape jsdom cannot
+produce, and reading it took seconds once there was something to read. **When a
+reported input bug will not reproduce, get a recording before optimising
+anything.**
 
 A single large flood fill legitimately costs a whole board re-render. That is one
 render, not a dropped click.
+
+## The trap that ate _every_ click: acting on `click` instead of press
+
+**A cell acts on `pointerdown`, not on `click`. Do not move this back to
+`onClick`.** This is not a latency preference; it is the difference between a
+board that works and one that ignores you.
+
+A browser fires `click` only when the mousedown and mouseup targets **agree**.
+When they disagree, it dispatches the click to their **nearest common ancestor**
+instead — the board. So play the way a fast player does, sweeping the pointer
+across the board and clicking as you go, and the pointer travels several cells
+between press and release. Every one of those clicks is sent to the board, and
+no cell ever hears about it.
+
+Measured on a screen recording of the bug: a median cursor speed of 1719 px/sec
+against a 33px cell pitch, so a 60ms click crosses about three cells. Across six
+seconds of continuous clicking, **exactly one cell revealed** — the one click
+where the mouse happened to be momentarily still. Reproduced in headless
+Chromium by pressing a cell and dragging 90px before release: **0 of 12 presses
+registered** on the old code, **12 of 12** after the change, and still 10 of 10
+with a 170px drag.
+
+Why this hid for so long, and why jsdom is the wrong place to look for it:
+
+- **jsdom cannot reproduce it.** `element.click()` dispatches a finished click
+  directly, so the down/up agreement — the entire question — never arises. Every
+  test written that way passes while the real app is unusable. Assert on
+  dispatched `pointerdown`, or drive a real browser.
+- **Hover still worked**, because hover is a hit-test, not a down/up agreement.
+  So the cells were visibly there, lit up under the cursor, and did nothing.
+
+`pointerdown` fires on the element the press _started_ on, however far the
+pointer travels afterwards, and it removes the wait for release. The guards
+around it are load-bearing, and each has a test:
+
+- **Primary button only** (`button !== 0`). Right click flags and middle click
+  chords; acting on their press too would flag a cell and then reveal or chord it
+  in one gesture.
+- **Touch is excluded** (`pointerType === 'touch'`). Touch keeps the long-press
+  path, and revealing on press would defeat the thing long press exists to do.
+- **`actedOnPress` swallows the follow-up click** so a press and its release act
+  once, not twice. A double act is not harmless: on a cell that revealed as a
+  number it chords and opens the neighbours on top of the reveal.
+- **`onPointerLeave` clears that flag**, for a press that started here and ended
+  elsewhere. That press never produces a click here, and a stale flag would
+  swallow the next real activation.
+
+## Secondary: `transform` on a cell moves its own hit box
+
+**A `transform` on a cell is not just visual** — it changes what the browser
+hit-tests against, because a transformed element is hit on its transformed
+geometry. A cell that resizes while the pointer is over it can shed presses near
+its edges.
+
+A revealed cell was `scale(0.96)`, painting at 28.8px rather than the 30px the
+board is built around, and it transitioned there over 90ms; `:active` was
+`translateY(1px)`. Both are gone, replaced by `PRESSED_SHADOW`, and the cell is
+paint-only now.
+
+**Know that this was diagnosed alongside the real bug and was not its cause.**
+The press-versus-click routing above was the cause, and it accounts for
+essentially all of the lost input. The transform removal is a real but secondary
+hazard, and it is in place at the moment. If a planned effect needs a cell to
+scale, the paint-only route is `transition-delay` keyed on distance from the
+clicked cell, which cannot move a hit box. The source-level `transform` /
+`scale(` / `translate(` checks in `npm test` will fail if a transform returns,
+so drop them deliberately rather than by accident.
+
+Why those checks exist is worth keeping in mind: the suite asserted
+`width: var(--cell)` and passed throughout, because `width` genuinely was 30px.
+**The declared size was correct and the painted size was not.** A stylesheet
+assertion can only catch that by banning the property, not by checking its value.
 
 ## The other silent-failure trap: gradients
 
@@ -162,17 +244,22 @@ An empty string means the value was rejected. `npm test` asserts this too.
 `CellButton` has three separate predicates. Conflating them broke flag removal
 once already — don't:
 
-- `canReveal` — hidden and unflagged: left click reveals
+- `canReveal` — hidden and unflagged: primary-button press reveals
 - `canFlag` — hidden, flagged or not: right click or `f` toggles the flag, so a
   misplaced flag is removable without a reset
-- `canChord` — revealed, safe, and numbered: click, middle click, right click,
+- `canChord` — revealed, safe, and numbered: press, middle click, right click,
   or `c` chords
+
+**Left and middle button aside, a mouse acts on `pointerdown`, not `click`** —
+see "The trap that ate _every_ click" above for why, and for the guards
+(primary button only, touch excluded, the follow-up click suppressed).
 
 On touch, a press held past `LONG_PRESS_MS` flags instead of revealing. The
 press sets a ref that `act` and `onContextMenu` consume, because mobile browsers
 fire a `contextmenu` and a `click` after a long press — without that, one long
 press toggles the flag straight back off. `touchmove` cancels, so scrolling never
-strays a flag.
+strays a flag. Touch is excluded from the press path for the same reason: acting
+on press would reveal the very cell the long press exists to flag.
 
 ## Conventions
 
@@ -187,7 +274,15 @@ strays a flag.
 
 Industrial instrument panel: dark field, cool blue as the only structural
 accent, amber/red reserved for mines and loss. Hidden cells are raised keys
-(gradient face, top highlight, bottom shadow); revealed cells are flat. Motion is
-limited to one short pop on reveal so a cascade reads as a sequence. No
+(gradient face, top highlight, bottom shadow); revealed cells are flat. No
 `background-attachment: fixed` or fixed overlays — they repaint on every scroll
 frame on mobile.
+
+**Input responsiveness outranks visual flair.** If an effect ever competes with
+a click being registered, the effect loses. That is not a hypothetical: an
+animated press feedback cost this board every click a fast player made. The
+reveal "pop" is now the raised face fading and flattening, paint-only, and the
+press state is a shadow. A cascade no longer reads as a ripple because the
+scale that produced it also moved the hit box; `transition-delay` keyed on
+distance from the clicked cell restores that read safely, and is the route to
+take if it is wanted back.
