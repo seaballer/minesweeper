@@ -20,7 +20,7 @@ npm run dev     # http://localhost:5173
 | `npm run dev`          | Dev server with hot reload                            |
 | `npm run build`        | Production bundle into`dist/`                         |
 | `npm run preview`      | Serve the built bundle                                |
-| `npm test`             | Mounts the UI in jsdom and drives it (238 assertions) |
+| `npm test`             | Mounts the UI in jsdom and drives it (244 assertions) |
 | `npm run lint`         | ESLint,`react-hooks` rules included                   |
 | `npm run format`       | Prettier, writes in place                             |
 | `npm run format:check` | Prettier, reports only                                |
@@ -77,7 +77,7 @@ Three layers, and the boundary between them is the point:
   own.
 
 `ui-check.mjs` is the test harness. It stands up jsdom, loads `App` through Vite
-SSR so JSX compiles, and drives it with real clicks — 238 assertions, no browser.
+SSR so JSX compiles, and drives it with real clicks — 244 assertions, no browser.
 It imports `GAP`, `BOARD_CHROME`, and `CELL` from `Board.jsx` so it asserts the
 same sizing arithmetic the CSS encodes rather than a hand-copied version.
 
@@ -109,9 +109,13 @@ Until that happens no cell is a mine and every `neighborMines` is `0`. To
 inspect a board without playing it, trigger placement yourself with
 `grid.ensureMinesPlaced(row, col)`.
 
-Because placement waits for the first click, a seeded layout also depends on
-which cell you open with. Two grids with the same seed match only if they start
-from the same cell.
+**First-click safety applies only to an unpinned board.** A board with no seed
+leaves the opening cell out of the shuffle, so the first click is always safe.
+A **pinned** board places from the seed alone and does not: its layout is
+knowable in advance, and letting the first click be a mine is what makes that
+worth anything. It also means a seeded board is genuinely reproducible — the
+same seed gives the same layout whoever plays it and wherever they start, rather
+than depending on the opening move.
 
 `grid.status` is `"ready" | "playing" | "win" | "gameover"`. Once it is `win` or
 `gameover` the game is terminal: further calls return that status and leave the
@@ -206,13 +210,15 @@ board-size field, so it can't wipe a game you're in the middle of typing into.
 
 Custom takes rows, columns, mines, and an optional seed, defaulting to
 12 × 14 / 25 with no seed. Input is clamped to 2–30 in each dimension and to at
-most `rows × cols - 1` mines, so a board always has a safe first click. Enter or
-Apply commits it.
+most `rows × cols - 1` mines, so an unseeded board always has a safe first
+click. Enter or Apply commits it.
 
 **Seed.** The field sits behind a **Seed?** checkbox, because pinning a board is
 something you opt into rather than something you fill in. Tick it and type any
 text to pin the layout: reset then replays exactly the same board, and anyone
-with the same seed, size, and mine count gets the identical board. Unticking it
+with the same seed, size, and mine count gets the identical board — from wherever
+they make their first move, and a seeded board gives you no free opening click,
+so if you know where the mines are you can open one on purpose. Unticking it
 and applying unpins the board again. The seed is part of the custom config, so
 switching to a preset and back restores it, checkbox and all.
 

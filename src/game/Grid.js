@@ -110,7 +110,20 @@ export class Grid {
             return;
         }
 
-        this.placeMines(safeRow, safeCol);
+        // First-click safety applies only to a board nobody pinned.
+        //
+        // Excluding whichever cell was opened first makes the layout depend on
+        // the opening move, so two people holding the same seed would get
+        // different boards — which defeats the point of pinning one. A pinned
+        // board places from the seed alone, and that also means its first click
+        // can be a mine: the layout is knowable in advance, so opening one is a
+        // real choice rather than an accident the board felt obliged to prevent.
+        if (this.pinnedSeed) {
+            this.placeMines();
+        } else {
+            this.placeMines(safeRow, safeCol);
+        }
+
         this.countNeighborMines();
         this.minesPlaced = true;
     }
@@ -121,9 +134,11 @@ export class Grid {
     // sampling without the retry loop.
     //
     // When safeRow/safeCol are in bounds that cell is left out of the
-    // candidate list, so it cannot be mined. The constructor guarantees
-    // mineCount <= total - 1, so there is always room for the exclusion and no
-    // fallback is needed.
+    // candidate list, so it cannot be mined — this is the first-click safety
+    // that an unpinned board gets. Omit them (or pass anything out of bounds)
+    // and every cell is a candidate; `ensureMinesPlaced` does that for a pinned
+    // board. The constructor guarantees mineCount <= total - 1, so there is
+    // always room for the exclusion and no fallback is needed.
     placeMines(safeRow, safeCol) {
         const safePosition = safeRow * this.cols + safeCol;
         const safeInBounds =

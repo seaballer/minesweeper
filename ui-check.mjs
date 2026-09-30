@@ -986,6 +986,56 @@ check(
         `${abc.seed} vs ${xbc.seed}`
     );
 
+    // --- First-click safety applies only to unpinned boards ---
+    //
+    // Excluding the opening cell used to make a seeded layout depend on which
+    // cell was opened first, so two people with the same seed got different
+    // boards. A pinned board now places from the seed alone.
+    const openA = new Grid(9, 9, 10, 'hello world');
+    const openB = new Grid(9, 9, 10, 'hello world');
+    openA.initialize();
+    openB.initialize();
+    openA.revealCell(0, 0);
+    openB.revealCell(8, 8);
+    check(
+        'a pinned board does not depend on the opening cell',
+        layout(openA) === layout(openB),
+        'same seed, different first clicks'
+    );
+
+    // And that is only safe because the first click is allowed to be a mine.
+    const probe = new Grid(9, 9, 10, 'detonate');
+    probe.initialize();
+    probe.revealCell(0, 0);
+    const mineCells = [];
+    probe.cells.forEach((row, r) => row.forEach((c, j) => c.isMine && mineCells.push([r, j])));
+    check('the probe board found its mines', mineCells.length === 10, `${mineCells.length} mines`);
+    const [mr, mc] = mineCells[0];
+    const lethal = new Grid(9, 9, 10, 'detonate');
+    lethal.initialize();
+    lethal.revealCell(mr, mc);
+    check(
+        'a pinned board lets the first click be a mine',
+        lethal.status === 'gameover' && lethal.cells[mr][mc].isMine,
+        `status=${lethal.status}`
+    );
+    check(
+        'the losing move uncovered the rest',
+        mineCells.every(([r, j]) => lethal.cells[r][j].isVisible)
+    );
+
+    // An unpinned board keeps the courtesy: the opening move is never a mine.
+    let openingsSafe = true;
+    for (let i = 0; i < 40; i++) {
+        const g = new Grid(9, 9, 10);
+        g.initialize();
+        const r = i % 9;
+        const c = (i * 3) % 9;
+        g.revealCell(r, c);
+        if (g.cells[r][c].isMine) openingsSafe = false;
+    }
+    check('an unpinned board still never opens on a mine', openingsSafe);
+
     // Pin the formula itself: sum of (1-based position * char code). 'ab' is
     // 1*97 + 2*98. If this ever changes, boards shared under an old seed stop
     // reproducing, so the number belongs in a test rather than only a comment.
@@ -1354,15 +1404,14 @@ check(
 
     // Mines only appear in the labels once the board is finished, so play each
     // board out before reading the layout off it.
-    const playOut = async () => {
-        // Reset, then open from the same cell each time so a pinned seed has a
-        // chance to match. Separate act calls: nesting them lets a stale cell
+    const playOut = async (openAt = 0) => {
+        // Separate act calls throughout: nesting them lets a stale cell
         // reference survive the re-render.
         await act(async () => {
             byText('Reset').click();
         });
         await act(async () => {
-            cells()[0].click();
+            cells()[openAt].click();
         });
         for (let i = 0; i < cells().length; i++) {
             const c = cells()[i];
@@ -1385,6 +1434,16 @@ check(
     );
     const replayed = await playOut();
     check('a text-seeded board replays through the UI', replayed === seeded);
+
+    // The shareable promise: same seed, same board, whoever opened it and
+    // wherever they started. This only holds because a pinned board no longer
+    // protects its first click.
+    const openedElsewhere = await playOut(20);
+    check(
+        'a text-seeded board is the same from a different opening cell',
+        openedElsewhere === seeded,
+        `opening at 20 gave a different layout`
+    );
 
     // The seed lives in the applied config, so it survives leaving Custom and
     // coming back -- the panel is keyed on that config.

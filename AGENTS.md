@@ -9,7 +9,7 @@ testable outside a browser.
 - `npm run dev` — Vite dev server on <http://localhost:5173>
 - `npm run build` — production bundle into `dist/`
 - `npm run preview` — serve the built bundle
-- `npm test` — mounts the components in jsdom and drives them (238 assertions)
+- `npm test` — mounts the components in jsdom and drives them (244 assertions)
 - `npm run lint` — ESLint (`react-hooks` rules included). Must be clean before committing.
 - `npm run format` / `npm run format:check` — Prettier. The config matches the
   existing style: 4-space indent, single quotes, 100 columns.
@@ -243,7 +243,7 @@ An empty string means the value was rejected. `npm test` asserts this too.
 
 ## `Grid` contracts worth knowing before you call it
 
-- The constructor allocates cells and `initialize()` resets them, but **neither places mines**. Placement is deferred to the first `revealCell` via `ensureMinesPlaced`, so the opening click is always safe. Until then the board has no mines and all `neighborMines` are 0.
+- The constructor allocates cells and `initialize()` resets them, but **neither places mines**. Placement is deferred to the first `revealCell` via `ensureMinesPlaced`, which is where first-click safety is decided — safe opening cell for an unpinned board, no safe cell for a pinned one. Until then the board has no mines and all `neighborMines` are 0.
 - `revealCell(row, col)` **always returns a status string** (`ready` / `playing` / `win` / `gameover`) and never `undefined`. A no-op — already-visible or flagged cell — returns the current status, because the board is unchanged. `chord` follows the same rule.
 - Seeds: a seed passed to the constructor is **pinned**, so `initialize()` replays that exact board. No seed means unpinned, and `initialize()` advances it, so reset yields a new board. Don't "simplify" this into one seed field — resetting a pinned grid is what makes a board shareable.
 - A seed may be a **number or a string**. `hashSeed` reduces one to the uint32 `mulberry32` consumes, summing each character's 1-based position times its char code. Positions start at 1 deliberately: a 0-indexed first term would make the leading character contribute nothing, so `"abc"` and `"xbc"` would share a board. `npm test` pins the formula (`hashSeed('ab') === 1*97 + 2*98`) because changing it silently invalidates every board shared under an old seed.
@@ -251,7 +251,8 @@ An empty string means the value was rejected. `npm test` asserts this too.
 - Only `seed === undefined` means unpinned. An empty string is a _valid_ seed of 0, so `resolveCustom` normalizes blanks to `undefined` before they reach `Grid`. The hook's equality check in `applyCustomSize` compares seed strings, so changing one rebuilds the board.
 - `grid.status` is `"ready" | "playing" | "win" | "gameover"`. Once `win` or `gameover`, the game is terminal: further `revealCell` calls return that status and don't change the board.
 - Flood fill skips flagged and mined cells, and doesn't expand through them.
-- The constructor clamps `mineCount` to `rows * cols - 1`, always leaving one safe cell. Mines are placed on the first click with that cell excluded, so a board needing every cell to be a mine has nowhere safe to open and is unwinnable before it starts. A 1×1 board asking for 1 mine becomes 1×1 with none, and wins immediately.
+- **First-click safety is conditional on the board being unpinned.** `ensureMinesPlaced` excludes the opening cell only when `!this.pinnedSeed`; a pinned board calls `placeMines()` with no safe cell, so the layout comes from the seed alone and the first click can be a mine. That is not just a difficulty setting — excluding the opening cell made a seeded layout depend on the opening move, so two people holding the same seed got different boards, which is the opposite of what pinning is for.
+- The constructor clamps `mineCount` to `rows * cols - 1`, always leaving one safe cell. For an _unpinned_ board that spare cell is the one the first click is guaranteed to open, so a board needing every cell to be a mine has nowhere safe to go and is unwinnable before it starts. A 1×1 board asking for 1 mine becomes 1×1 with none, and wins immediately. A _pinned_ board does not lean on the first click for safety, but the clamp still holds so the board is winnable at all.
 - Coordinate entry points (`revealCell`, `chord`, `toggleFlag`) call `assertInBounds` and throw a `RangeError` naming the board size and valid range. Out of range is a caller bug, not a game state, so it throws rather than being silently ignored — an ignored bad coordinate would make a cell quietly unclickable with no signal.
 - `toggleFlag(row, col)` places or lifts a flag and keeps `flagCount` in step. Like `revealCell` and `chord` it **always returns a status string**, and it is a no-op on a visible cell (a flag there would be nonsense, and `Cell` refuses). It is the only supported way to change a flag — see "Where the per-click work goes" for why the UI stopped reaching into `cells` directly.
 - `remainingSafeCells` only decrements when `Cell.reveal()` returns `true`. Win is an exact `=== 0` check.
