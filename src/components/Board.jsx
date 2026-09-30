@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import Box from '@mui/material/Box';
 import CellButton from './CellButton.jsx';
 
@@ -15,8 +16,19 @@ export { GAP, BOARD_CHROME, PAD, BORDER, CELL };
 
 /**
  * The board itself: a fixed grid of cells, one click handler per input.
+ *
+ * Memoized, and that needs care. `grid` is the same object on every render and
+ * the cells inside it are mutated in place, so on a click *no* prop here
+ * changes — a bare `memo` would compare equal and the board would go dead.
+ * `version` is the one prop that does move, and it exists purely to be that
+ * signal. Do not memoize this component away from it, and do not use
+ * `version` for anything.
+ *
+ * What it buys: `useTimer` re-renders App four times a second, and without
+ * this that rebuilt all 480 cells every quarter second to redraw one clock.
+ * Now the tick leaves the board alone and only a real move repaints it.
  */
-export default function Board({ grid, onReveal, onFlag, onChord, disabled }) {
+function Board({ grid, version: _version, onReveal, onFlag, onChord, disabled }) {
     return (
         <Box
             // `group`, not `grid`: a real ARIA grid requires owned row/gridcell
@@ -76,3 +88,9 @@ export default function Board({ grid, onReveal, onFlag, onChord, disabled }) {
         </Box>
     );
 }
+
+// `_version` is bound but never read: it is here so `memo` has a prop whose
+// value changes. The rename keeps the linter quiet without an inline disable.
+// Renaming the local does not affect this — `memo` compares the props object
+// App passed in, where the key is still `version`.
+export default memo(Board);

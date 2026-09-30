@@ -20,7 +20,7 @@ npm run dev     # http://localhost:5173
 | `npm run dev`          | Dev server with hot reload                            |
 | `npm run build`        | Production bundle into`dist/`                         |
 | `npm run preview`      | Serve the built bundle                                |
-| `npm test`             | Mounts the UI in jsdom and drives it (172 assertions) |
+| `npm test`             | Mounts the UI in jsdom and drives it (200 assertions) |
 | `npm run lint`         | ESLint,`react-hooks` rules included                   |
 | `npm run format`       | Prettier, writes in place                             |
 | `npm run format:check` | Prettier, reports only                                |
@@ -77,7 +77,7 @@ Three layers, and the boundary between them is the point:
   own.
 
 `ui-check.mjs` is the test harness. It stands up jsdom, loads `App` through Vite
-SSR so JSX compiles, and drives it with real clicks — 172 assertions, no browser.
+SSR so JSX compiles, and drives it with real clicks — 200 assertions, no browser.
 It imports `GAP`, `BOARD_CHROME`, and `CELL` from `Board.jsx` so it asserts the
 same sizing arithmetic the CSS encodes rather than a hand-copied version.
 

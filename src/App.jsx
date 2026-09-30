@@ -18,6 +18,7 @@ export default function App() {
     const theme = useTheme();
     const {
         grid,
+        version,
         difficulty,
         customSize,
         status,
@@ -133,6 +134,11 @@ export default function App() {
 
                         <Board
                             grid={grid}
+                            // Bumped on every model mutation. Board is
+                            // `memo`ized and reads a model that mutates in
+                            // place, so without this it would never repaint.
+                            // See the note on `version` in useMinesweeper.
+                            version={version}
                             onReveal={reveal}
                             onFlag={toggleFlag}
                             onChord={chord}

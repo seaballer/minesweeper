@@ -195,6 +195,31 @@ check(
     alreadyRevealed.getAttribute('aria-label')
 );
 
+// Board is `memo`ized, and the model it renders mutates in place — so on a
+// click none of its props change except the `version` token. If that token
+// ever stops reaching it, the board keeps rendering stale cells while the model
+// moves on: clicks register and nothing appears to happen. Guard that directly.
+// Must be unflagged: clicking a flagged cell is a no-op by design, which
+// would make this pass or fail for the wrong reason.
+const isFreeHidden = (c) => {
+    const l = c.getAttribute('aria-label') || '';
+    return /hidden/.test(l) && !/flagged/.test(l);
+};
+const repaintTarget = cells().find(isFreeHidden);
+if (!repaintTarget) {
+    check('a memoized board still repaints on click', false, 'no unflagged hidden cell');
+} else {
+    const before = repaintTarget.getAttribute('aria-label');
+    await act(async () => {
+        repaintTarget.click();
+    });
+    check(
+        'a memoized board still repaints on click',
+        repaintTarget.getAttribute('aria-label') !== before,
+        `${before} -> ${repaintTarget.getAttribute('aria-label')}`
+    );
+}
+
 // Reset
 await act(async () => {
     byText('Reset').click();
@@ -849,6 +874,80 @@ check(
     c2.cells[1][1].isWrongFlag = true;
     c2.cells[1][1].toggleFlag();
     check('unflagging clears the wrong-flag marker', !c2.cells[1][1].isWrongFlag);
+}
+
+// --- Grid.flagCount: the O(1) tally that replaced a full rescan per click ---
+{
+    const g = new Grid(5, 5, 3, 7);
+    g.initialize();
+    check('flagCount starts at zero', g.flagCount === 0, `got ${g.flagCount}`);
+
+    g.toggleFlag(0, 0);
+    g.toggleFlag(1, 1);
+    check('two flags are counted', g.flagCount === 2, `got ${g.flagCount}`);
+
+    g.toggleFlag(0, 0);
+    check('unflagging decrements', g.flagCount === 1, `got ${g.flagCount}`);
+
+    // The tally has to agree with the cells, always. This is the invariant the
+    // old per-click `flat().filter()` scan was effectively re-deriving.
+    const scanned = () => g.cells.flat().filter((c) => c.isFlagged).length;
+    check(
+        'tally matches a scan of the cells',
+        g.flagCount === scanned(),
+        `${g.flagCount} vs ${scanned()}`
+    );
+
+    // A revealed cell refuses to change, so the count must not move either.
+    g.cells[2][2].reveal();
+    const beforeNoop = g.flagCount;
+    g.toggleFlag(2, 2);
+    check(
+        'flagging a revealed cell is a no-op',
+        !g.cells[2][2].isFlagged && g.flagCount === beforeNoop,
+        `count ${beforeNoop} -> ${g.flagCount}`
+    );
+    check('tally still matches after a no-op', g.flagCount === scanned());
+
+    // Same contract as revealCell/chord: always a status, never undefined, so
+    // a refused action reports the current state rather than vanishing.
+    check(
+        'toggleFlag returns a status',
+        g.toggleFlag(3, 3) === 'ready',
+        String(g.toggleFlag(3, 3))
+    );
+
+    // Reset rebuilds the cells, so the tally has to go back to zero with them.
+    g.initialize();
+    check('reset zeroes the tally', g.flagCount === 0, `got ${g.flagCount}`);
+
+    // Out of range is a caller bug, same as the other coordinate entry points.
+    let threw = false;
+    try {
+        g.toggleFlag(99, 0);
+    } catch (e) {
+        threw = e instanceof RangeError;
+    }
+    check('out-of-range toggleFlag throws a RangeError', threw);
+    check('a rejected flag leaves the tally alone', g.flagCount === 0, `got ${g.flagCount}`);
+
+    // A decided game is terminal for every coordinate entry point, not just
+    // the ones the UI happens to guard.
+    const done = new Grid(2, 2, 1, 3);
+    done.initialize();
+    done.cells[1][1].placeMine();
+    done.countNeighborMines();
+    done.minesPlaced = true;
+    done.revealCell(0, 0);
+    done.revealCell(0, 1);
+    done.revealCell(1, 0);
+    check('terminal board for the flag test', done.status === 'win', done.status);
+    done.toggleFlag(1, 1);
+    check(
+        'a won board refuses new flags',
+        !done.cells[1][1].isFlagged && done.flagCount === 0,
+        `flagged=${done.cells[1][1].isFlagged} count=${done.flagCount}`
+    );
 }
 
 // A wrong flag on a fresh board is impossible to survive to a win: a flagged

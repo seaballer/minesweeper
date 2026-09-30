@@ -9,7 +9,7 @@ testable outside a browser.
 - `npm run dev` — Vite dev server on <http://localhost:5173>
 - `npm run build` — production bundle into `dist/`
 - `npm run preview` — serve the built bundle
-- `npm test` — mounts the components in jsdom and drives them (159 assertions)
+- `npm test` — mounts the components in jsdom and drives them (198 assertions)
 - `npm run lint` — ESLint (`react-hooks` rules included). Must be clean before committing.
 - `npm run format` / `npm run format:check` — Prettier. The config matches the
   existing style: 4-space indent, single quotes, 100 columns.
@@ -79,6 +79,53 @@ is not hypothetical — it shipped a bug where clicking a cell revealed nothing.
 adding props. See the "Model mutates in place" note in the hook for the other
 half of this problem.
 
+The same trap has a second form, on `Board` itself. `Board` **is** `memo`ized, and
+on a click none of its real props change — `grid` is the same object, and the cells
+inside it are mutated in place. It survives only because `version` (the hook's
+invalidation token) is passed to it as a prop, and that prop is the one thing that
+moves. `npm test` asserts a click repaints the board for exactly this reason. If
+you ever drop `version` from `Board`'s props, or stop passing it in `App.jsx`,
+the board goes dead: clicks still register in the model and nothing appears to
+happen. `_version` is bound but unread on purpose — it is there to be compared.
+
+The win is that `useTimer` re-renders `App` four times a second, and without
+`memo` on `Board` each of those rebuilt all 480 cells to redraw one clock.
+Measured: a 1200ms stretch of timer ticks now produces **zero** `Board` renders,
+while every live click still produces one.
+
+## Where the per-click work goes
+
+The flag tally is an O(1) field read, not a rescan. It used to be a `useMemo` doing
+`grid.cells.flat().filter(...)` keyed on `version` — an O(n) pass allocating two
+throwaway arrays on **every click and every render for any reason**. `Grid` now owns
+`flagCount` and `Grid.toggleFlag(row, col)` is the only way to place or lift a
+flag, so the UI no longer reaches into `cells[row][col]` to do it itself. That
+also means the bounds check happens on that path; when the hook indexed the array
+directly it had to call `assertInBounds` by hand.
+
+If you add a way to change a flag, route it through `Grid.toggleFlag`. The tally is
+derived from before/after cell state, not from what `Cell.toggleFlag` reports, so
+a refused toggle (a visible cell) cannot skew it — but only if the mutation still
+goes through `Grid`. `npm test` cross-checks `flagCount` against a scan of the
+cells and covers the no-op, reset, and out-of-range cases.
+
+## A note on measuring input
+
+A "clicks aren't registering" report here was chased down to nothing: rapid clicks
+all applied. Two things made it look like loss, and both are traps to avoid
+re-introducing into a probe:
+
+- Once the game is decided the board correctly ignores clicks, and unvisited safe
+  cells keep their `hidden` label at game over. Counting those as dropped input
+  invents a bug. Filter on `!cell.disabled` and on the banner being empty.
+- The first click after switching difficulty also renders every cell for the first
+  time (emotion styles, `cell.reveal` state). Timing that one and calling it
+  per-click cost measures JIT warmup, not steady state. Benchmark the median of a
+  run, not a single click.
+
+A single large flood fill legitimately costs a whole board re-render. That is one
+render, not a dropped click.
+
 ## The other silent-failure trap: gradients
 
 **A gradient passed to `backgroundColor` is silently dropped.** It accepts only
@@ -102,7 +149,8 @@ An empty string means the value was rejected. `npm test` asserts this too.
 - `grid.status` is `"ready" | "playing" | "win" | "gameover"`. Once `win` or `gameover`, the game is terminal: further `revealCell` calls return that status and don't change the board.
 - Flood fill skips flagged and mined cells, and doesn't expand through them.
 - The constructor clamps `mineCount` to `rows * cols - 1`, always leaving one safe cell. Mines are placed on the first click with that cell excluded, so a board needing every cell to be a mine has nowhere safe to open and is unwinnable before it starts. A 1×1 board asking for 1 mine becomes 1×1 with none, and wins immediately.
-- Coordinate entry points (`revealCell`, `chord`, and the UI's `toggleFlag`) call `assertInBounds` and throw a `RangeError` naming the board size and valid range. Out of range is a caller bug, not a game state, so it throws rather than being silently ignored — an ignored bad coordinate would make a cell quietly unclickable with no signal.
+- Coordinate entry points (`revealCell`, `chord`, `toggleFlag`) call `assertInBounds` and throw a `RangeError` naming the board size and valid range. Out of range is a caller bug, not a game state, so it throws rather than being silently ignored — an ignored bad coordinate would make a cell quietly unclickable with no signal.
+- `toggleFlag(row, col)` places or lifts a flag and keeps `flagCount` in step. Like `revealCell` and `chord` it **always returns a status string**, and it is a no-op on a visible cell (a flag there would be nonsense, and `Cell` refuses). It is the only supported way to change a flag — see "Where the per-click work goes" for why the UI stopped reaching into `cells` directly.
 - `remainingSafeCells` only decrements when `Cell.reveal()` returns `true`. Win is an exact `=== 0` check.
 - `revealAllMines(explodedRow, explodedCol)` uncovers every mine. On a loss it marks the whole **connected** mine cluster around the detonation (mine → adjacent mine → …) as `isExploded`, not just the clicked cell — after a chording detonation, one red cell among grey ones reads as if the neighbours were safe. On a win nothing is marked.
 - `revealAllMines` also marks **wrong flags**: a flagged cell that was not a mine is uncovered and flagged `isWrongFlag`, rendered as a cross over the flag. Correctly-placed flags are untouched. A win can never contain one, since a flagged cell is never revealed.

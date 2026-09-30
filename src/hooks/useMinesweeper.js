@@ -10,7 +10,10 @@ import { useTimer } from './useTimer.js';
  * replaced, so React sees no change between renders. Two things work around it:
  *
  * 1. `version` is bumped after every mutation purely to force a re-render. It
- *    is deliberately unused — don't read it, just let it invalidate.
+ *    is not game state and nothing should branch on its value. It IS handed to
+ *    `Board`, because `Board` reads the mutating model and a `memo`ized
+ *    `Board` needs a prop that actually changes to know to repaint — see the
+ *    note there. Everywhere else, just let it invalidate.
  * 2. Components must not take a `Cell` object as a prop. The reference is
  *    identical across renders, so a `memo`ized component would never repaint.
  *    `CellButton` takes flat primitives for this reason.
@@ -72,10 +75,7 @@ export function useMinesweeper(initialDifficulty = DEFAULT_DIFFICULTY) {
             if (grid.status === 'win' || grid.status === 'gameover') {
                 return;
             }
-            // Same guard as revealCell/chord. Without it this indexes the array
-            // directly and dies with a raw TypeError.
-            grid.assertInBounds(row, col);
-            grid.cells[row][col].toggleFlag();
+            grid.toggleFlag(row, col);
             rerender();
         },
         [grid, rerender]
@@ -120,19 +120,12 @@ export function useMinesweeper(initialDifficulty = DEFAULT_DIFFICULTY) {
         setGameId((id) => id + 1);
     }, []);
 
-    // `version` is an invalidation token, not a value the memo reads: the
-    // model mutates in place, so without it this would never recompute. The
-    // linter flags it as an unnecessary dependency, which is exactly the
-    // "adjust state when something external changes" case its docs describe.
-    //
-    // Recounting beats keeping a counter in state here: the scan is
-    // self-healing if the model is mutated by a path that forgets to bump the
-    // counter, and at 480 cells the cost is negligible next to a click.
-    const flagsPlaced = useMemo(
-        () => grid.cells.flat().filter((cell) => cell.isFlagged).length,
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-        [grid, version]
-    );
+    // Read straight off the model. This used to be a `useMemo` that rescanned
+    // every cell for `isFlagged` on each version bump — an O(n) pass throwing
+    // away two throwaway arrays on every single click. `Grid` maintains the
+    // tally itself, so this is now a field read that is correct on any render,
+    // for any reason, with nothing to recompute or invalidate.
+    const flagsPlaced = grid.flagCount;
 
     const minesRemaining = Math.max(0, grid.mineCount - flagsPlaced);
 
@@ -142,6 +135,9 @@ export function useMinesweeper(initialDifficulty = DEFAULT_DIFFICULTY) {
 
     return {
         grid,
+        // Not state — see the note on `version` at the top of this file. Passed
+        // to Board purely so its `memo` has something that changes to compare.
+        version,
         difficulty: DIFFICULTIES[difficultyKey],
         boardSize,
         customSize,

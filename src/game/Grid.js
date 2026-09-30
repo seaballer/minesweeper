@@ -35,6 +35,7 @@ export class Grid {
         this.pinnedSeed = seed !== undefined;
         this.seed = seed ?? nextSeed++;
         this.remainingSafeCells = rows * cols - this.mineCount;
+        this.flagCount = 0;
         this.cells = this.createGrid();
         this.minesPlaced = false;
         this.status = 'ready';
@@ -53,6 +54,9 @@ export class Grid {
         }
         this.cells = this.createGrid();
         this.remainingSafeCells = this.rows * this.cols - this.mineCount;
+        // createGrid() hands back brand new Cells, so every flag is already
+        // gone; the counter just has to follow it back to zero.
+        this.flagCount = 0;
         this.minesPlaced = false;
         this.status = 'ready';
     }
@@ -272,6 +276,40 @@ export class Grid {
         }
 
         this.status = 'playing';
+        return this.status;
+    }
+
+    // Places or lifts a flag, keeping `flagCount` in step.
+    //
+    // This exists so flagging goes through the same door as reveal and chord:
+    // the UI used to reach into `cells[row][col]` and flip the flag itself,
+    // which meant the flag tally had to be recounted by scanning every cell on
+    // every render. Owning it here makes the tally O(1) and keeps the
+    // bounds check that direct indexing would otherwise have skipped.
+    //
+    // Like `revealCell` and `chord`, this enforces the terminal status itself
+    // rather than trusting the caller to. The UI checks too, but a decided game
+    // is a property of the model, and a rule that lives only in the view is one
+    // refactor away from being wrong.
+    //
+    // The count is derived from before/after state rather than from what
+    // `Cell.toggleFlag` reports, so a no-op (a visible cell, which refuses to
+    // change) can never skew it.
+    toggleFlag(row, col) {
+        this.assertInBounds(row, col);
+
+        if (this.status === 'win' || this.status === 'gameover') {
+            return this.status;
+        }
+
+        const cell = this.cells[row][col];
+        const wasFlagged = cell.isFlagged;
+        cell.toggleFlag();
+
+        if (cell.isFlagged !== wasFlagged) {
+            this.flagCount += wasFlagged ? -1 : 1;
+        }
+
         return this.status;
     }
 
