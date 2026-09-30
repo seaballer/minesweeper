@@ -32,7 +32,10 @@ export default function App() {
     } = useMinesweeper();
 
     return (
-        <Container maxWidth="md" sx={{ py: { xs: 3, sm: 6 } }}>
+        // `xl`, not `md`: cells are a fixed 30px, so an Expert board is 1021px
+        // wide. A 960px cap would scroll it horizontally, which is exactly the
+        // problem the constant cell size traded away.
+        <Container maxWidth="xl" sx={{ py: { xs: 3, sm: 6 } }}>
             <Stack spacing={3}>
                 {/* Title block sits left-aligned against a centered board, so the
                     two are deliberately misaligned rather than stacked flush. */}
@@ -79,10 +82,10 @@ export default function App() {
 
                 <StatusBanner status={status} />
 
-                {/* `container-type: inline-size` makes this box the reference
-                    for the `cqi` units the board sizes itself against, so cells
-                    fit the actual column rather than the viewport. */}
-                <Box sx={{ overflowX: 'auto', pb: 1, containerType: 'inline-size' }}>
+                {/* Scrolls only if a board exceeds the available width, which
+                    means an oversized custom board or a narrow phone. Cells
+                    themselves never shrink. */}
+                <Box sx={{ overflowX: 'auto', pb: 1 }}>
                     <Box sx={{ display: 'flex', justifyContent: 'center', minWidth: 'fit-content' }}>
                         <Board
                             grid={grid}

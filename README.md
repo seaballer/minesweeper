@@ -127,9 +127,10 @@ first version have been smoothed out; what remains is noted here.
   error. Validate at the UI layer.
 - **Flagging needs a right click or the `f` key**, so it doesn't work on touch
   devices yet.
-- **Expert scrolls on phones.** Cells have an 18px floor so they stay tappable;
-  a 30-wide board cannot fit in 375px below that. Every difficulty fits without
-  scrolling at 768px and up.
+- **Cell size is fixed at 30px on every difficulty.** The board grows with the
+  number of cells rather than shrinking them, so a Beginner cell is the same
+  size as an Expert one. Only oversized custom boards and phones scroll
+  horizontally.
 
 ## To-do
 

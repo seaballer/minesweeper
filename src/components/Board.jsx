@@ -1,14 +1,16 @@
 import Box from '@mui/material/Box';
 import CellButton from './CellButton.jsx';
 
-// Spacing constants, named so the sizing math below stays readable and the
-// test harness can import the same numbers instead of hand-copying them.
+// Spacing constants, named so the sizing math stays readable and the test
+// harness can import the same numbers instead of hand-copying them.
 const GAP = 3;
 const PAD = 16;
 // Board padding (2 * PAD) plus its 1px border on each side.
 const BOARD_CHROME = PAD * 2 + 2;
+// Fixed cell edge length. Constant across every board size on purpose.
+const CELL = 30;
 
-export { GAP, BOARD_CHROME };
+export { GAP, BOARD_CHROME, CELL };
 
 /**
  * The board itself: a fixed grid of cells, one click handler per input.
@@ -28,17 +30,16 @@ export default function Board({ grid, onReveal, onFlag, onChord, disabled }) {
                 // `--cell` is the single source of truth for cell size, read by
                 // both the grid tracks and the cells so they cannot disagree.
                 //
-                // It must size against the CONTAINER, not the viewport: the
-                // board sits inside a capped Container, so `100vw` over-reports
-                // the space available and expert overflows on wide screens.
-                // `cqi` measures the nearest `container-type: inline-size`
-                // ancestor (set on the scroll wrapper in App.jsx) and is
-                // immune to scrollbar width and Container caps.
+                // It is a CONSTANT. Cells used to shrink on wider boards so
+                // they would fit the container, which meant an Expert cell was
+                // visibly smaller than a Beginner one. A constant size keeps
+                // the grid readable and the digits the same size on every
+                // difficulty; the board grows instead, and the Container is
+                // sized in App.jsx to accommodate the widest preset.
                 //
-                // The 18px floor keeps cells tappable. A 30-wide Expert board
-                // on a phone cannot fit below that, so it scrolls there rather
-                // than shrinking into nothing.
-                '--cell': `clamp(18px, min(30px, calc((100cqi - ${BOARD_CHROME}px - ${(grid.cols - 1) * GAP}px) / ${grid.cols})), 30px)`,
+                // The wrapper scrolls if a board ever exceeds the available
+                // width (phones), rather than shrinking cells below tappable.
+                '--cell': `${CELL}px`,
                 gridTemplateColumns: `repeat(${grid.cols}, var(--cell))`,
                 gap: `${GAP}px`,
                 p: 2,

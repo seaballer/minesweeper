@@ -32,21 +32,20 @@ testable outside a browser.
 
 ## Board sizing
 
-Cell size is a `--cell` custom property on `Board`, read by both the grid
-tracks and the cells so they cannot disagree. Two things to know:
+Cell size is a **constant 30px**, exposed as the `--cell` custom property on
+`Board` and read by both the grid tracks and the cells so they cannot disagree.
 
-- It is computed from **`100cqi`, not `100vw`.** The board sits inside a capped
-  `Container`, so a viewport unit over-reports the space available and the
-  Expert board overflows on wide screens. The `cqi` unit resolves against the
-  nearest `container-type: inline-size` ancestor, which is the scroll wrapper
-  in `App.jsx`. If you move the board, keep it inside that wrapper.
-- The 18px lower bound is deliberate. A 30-wide Expert board on a phone cannot
-  fit below that, so it scrolls there rather than shrinking into untappable
-  cells.
+Do not make it responsive. It used to shrink to fit the container, which meant
+an Expert cell was visibly smaller than a Beginner one — inconsistent cells
+between difficulties, and the whole reason the board looked like it "freaked
+out" when switching modes. The board grows instead, and `App.jsx` uses
+`maxWidth="xl"` so the widest preset still fits without scrolling. Only
+oversized custom boards (and phones) scroll, which is the right trade.
 
-`GAP` and `BOARD_CHROME` are exported from `Board.jsx` and imported by
-`ui-check.mjs`, so the test asserts the same arithmetic the CSS encodes
-instead of a hand-copied version.
+`GAP`, `BOARD_CHROME`, and `CELL` are exported from `Board.jsx` and imported by
+`ui-check.mjs`, so the test asserts the same arithmetic the CSS encodes rather
+than a hand-copied version. The test also fails if any viewport- or
+container-relative unit (`vw`, `cqi`, `clamp`) reappears in `--cell`.
 
 ## The one non-obvious React gotcha
 

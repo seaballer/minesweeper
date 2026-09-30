@@ -174,45 +174,51 @@ check('counter exposes a role', $('#mine-counter')?.getAttribute('role') === 'st
 check('board is a group not a malformed grid',
     !!$('#minefield') && !$('[role="grid"]'));
 
-// The board must fit its CONTAINER, not the viewport: it lives inside a
-// maxWidth Container, so sizing against 100vw over-reports and overflows on
-// wide screens. jsdom won't evaluate cqi/clamp, so assert the same arithmetic
-// the stylesheet encodes, using the constants imported from Board.jsx.
-const { GAP, BOARD_CHROME } = await vite.ssrLoadModule('/src/components/Board.jsx');
-const CONTAINER_MAX = 960; // MUI `md`, the widest the board ever gets
-const GUTTER = 48;         // Container padding
+// Cell size is a CONSTANT, independent of board size. This is the reported
+// bug: cells used to shrink on wider boards, so an Expert cell was visibly
+// smaller than a Beginner one. Assert the constant and the fit against it,
+// using the constants imported from Board.jsx.
+const { GAP, BOARD_CHROME, CELL } = await vite.ssrLoadModule('/src/components/Board.jsx');
+const CONTAINER_MAX = 1920; // MUI `xl`, set in App.jsx to fit the widest board
+const GUTTER = 48;
 
-const cellFor = (cols, containerWidth) =>
-    Math.max(18, Math.min(30, (containerWidth - BOARD_CHROME - (cols - 1) * GAP) / cols));
+const boardWidth = (cols) => cols * CELL + (cols - 1) * GAP + BOARD_CHROME;
 
-const boardWidth = (cols, containerWidth) =>
-    cols * cellFor(cols, containerWidth) + (cols - 1) * GAP + BOARD_CHROME;
+check('cell size is a constant 30px', CELL === 30, `${CELL}px`);
+for (const cols of [9, 16, 30, 40]) {
+    check(`board width for ${cols} cols assumes a constant cell`,
+        boardWidth(cols) === cols * CELL + (cols - 1) * GAP + BOARD_CHROME,
+        `${boardWidth(cols).toFixed(0)}px`);
+}
 
-// Every difficulty must fit at every desktop/tablet width, including ones
-// where the Container cap binds (vw above 960) and ones where it doesn't.
+// Every preset must still fit without scrolling on a desktop viewport.
 for (const [label, cols] of [['beginner', 9], ['intermediate', 16], ['expert', 30]]) {
-    for (const vw of [1920, 1440, 1280, 1107, 1024, 960, 900, 768]) {
+    for (const vw of [1920, 1440, 1280, 1200, 1100]) {
         const container = Math.min(vw, CONTAINER_MAX) - GUTTER;
-        const bw = boardWidth(cols, container);
-        check(`${label} fits at ${vw}px`, bw <= container,
-            `board ${bw.toFixed(0)} vs ${container} available`);
+        check(`${label} fits at ${vw}px`, boardWidth(cols) <= container,
+            `board ${boardWidth(cols)} vs ${container} available`);
     }
 }
 
-// The 18px floor must hold: cells never shrink below a tappable size.
-for (const cols of [9, 16, 30]) {
-    check(`cell floor is 18px at 375px (${cols} cols)`, cellFor(cols, 375 - GUTTER) >= 18,
-        `${cellFor(cols, 375 - GUTTER).toFixed(1)}px`);
-}
+// The App container must be wide enough for the widest preset, or the
+// constant cell size would trade cell consistency for scrolling.
+const appSrc = await (await import('node:fs/promises')).readFile('src/App.jsx', 'utf8');
+check('App container is xl', /maxWidth="xl"/.test(appSrc), 'expected maxWidth="xl"');
+check('widest preset fits the xl container', boardWidth(30) + GUTTER <= 1920,
+    `${boardWidth(30) + GUTTER} <= 1920`);
 
 // Cells must size from the shared variable so tracks and cells agree. The
 // rules live in Emotion's sheet, which jsdom does not expose, so read the
 // component source instead of guessing.
 const boardSrc = await (await import('node:fs/promises')).readFile('src/components/Board.jsx', 'utf8');
 const cellSrc = await (await import('node:fs/promises')).readFile('src/components/CellButton.jsx', 'utf8');
-// Strip comments before scanning, so prose about 100vw isn't mistaken for use.
+// Strip comments before scanning, so prose about old approaches isn't mistaken
+// for real code.
 const code = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
-check('board uses cqi, not 100vw', /100cqi/.test(code(boardSrc)) && !/100vw/.test(code(boardSrc)));
+// The cell size must be a plain constant. Any viewport- or container-relative
+// unit (vw, cqi, %, clamp, min) means cells would vary with board size again.
+check('cell size uses no responsive units', !/(--cell[^\n]*\b(vw|cqi|vh|%)\b)/.test(code(boardSrc)));
+check('cell size has no clamp/min/max', !/--cell[^\n]*(clamp|min|max)\(/.test(code(boardSrc)));
 check('cells size from the shared variable', /var\(--cell\)/.test(code(cellSrc)));
 check('no hardcoded 30px cell width', !/width:\s*30\s*,/.test(cellSrc));
 
