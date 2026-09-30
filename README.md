@@ -156,25 +156,25 @@ Roughly in the order they'd unblock each other.
 
 ### Fix the issues listed above
 
-- [X] Add first-click safety: `placeMines()` runs on the first `revealCell` and excludes that cell
-- [X] Make `floodFill` skip flagged cells
-- [X] Reveal all mines on game over (and on win, for a legible final board)
-- [X] Guard `mineCount` against exceeding `rows * cols` (clamped in the constructor)
-- [X] Make a decided game terminal so a win can't become a loss
+- [x] Add first-click safety: `placeMines()` runs on the first `revealCell` and excludes that cell
+- [x] Make `floodFill` skip flagged cells
+- [x] Reveal all mines on game over (and on win, for a legible final board)
+- [x] Guard `mineCount` against exceeding `rows * cols` (clamped in the constructor)
+- [x] Make a decided game terminal so a win can't become a loss
 - [ ] Decide what `revealCell` should return on a no-op — `undefined` is inconsistent with the documented states
 - [ ] Validate out-of-range coordinates instead of throwing a raw `TypeError`
 
 ### Structure and polish
 
-- [X] Replace the empty `Game.js` stub with `useMinesweeper` as the controller
-- [X] Move board sizes into `difficulties.js` config
+- [x] Replace the empty `Game.js` stub with `useMinesweeper` as the controller
+- [x] Move board sizes into `difficulties.js` config
 - [ ] Persist best times per difficulty (the timer now records them per run)
 - [ ] Add a seed input for shareable/reproducible boards
 - [ ] Keyboard navigation and focus management across the board
 
 ### Testing
 
-- [X] Add a `test` script and a jsdom harness driving the real components
+- [x] Add a `test` script and a jsdom harness driving the real components
 - [ ] Add `node:test` unit tests for the model: `placeMines` determinism and exact mine count, `countNeighborMines` correctness, flood fill boundaries, win detection
 - [ ] Cover the remaining edge cases: the 1×1/1-mine board, out-of-range coordinates
 

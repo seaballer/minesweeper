@@ -245,19 +245,11 @@ check('board is a group not a malformed grid',
     // Assert the computed style rather than the inline string, per AGENTS.md.
     const titleCss = dom.window.getComputedStyle(title);
     check('title is uppercase', titleCss.textTransform === 'uppercase', titleCss.textTransform);
-    check('title is gradient-clipped', titleCss.backgroundClip === 'text', titleCss.backgroundClip);
-    // Explicitly sized, so a browser zoom repaints the gradient instead of
-    // resampling a cached bitmap of it.
-    check('title background is sized to the glyphs',
-        titleCss.backgroundSize === '100% 100%', titleCss.backgroundSize);
-    // jsdom may report the keyword or resolve it to a zero-alpha colour.
-    check('title fill is transparent via text-fill',
-        titleCss.webkitTextFillColor === 'transparent'
-        || titleCss.webkitTextFillColor === 'rgba(0, 0, 0, 0)',
-        titleCss.webkitTextFillColor);
-    // `color` stays a real value so the title stays readable where
-    // background-clip is unsupported, rather than vanishing.
-    check('title keeps a readable fallback colour',
+    // The gradient fill is commented out in App.jsx: it rendered incorrectly
+    // at some browser zoom levels and a better treatment is deferred. Assert
+    // the flat fallback is in place and no clipping layer is left active.
+    check('title is not gradient-clipped', titleCss.backgroundClip !== 'text', titleCss.backgroundClip);
+    check('title has a readable flat colour',
         titleCss.color === 'rgb(255, 255, 255)', titleCss.color);
     // Trailing tracking skews a centred word to the right; the indent must be
     // exactly half of it to compensate.

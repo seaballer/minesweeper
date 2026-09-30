@@ -65,23 +65,21 @@ export default function App() {
                             // the visible glyphs half of that left of centre.
                             // Indenting by the other half re-centres them.
                             textIndent: '0.11em',
-                            // The gradient is painted as a background sized to
-                            // the glyphs. Without an explicit `background-size`
-                            // it is sized to the element box, and zooming in
-                            // Chrome resamples that cached bitmap instead of
-                            // repainting it, which visibly breaks the fill.
-                            backgroundImage: `linear-gradient(180deg, ${theme.wordmark.top} 0%, ${theme.wordmark.mid} 55%, ${theme.wordmark.bottom} 100%)`,
-                            backgroundSize: '100% 100%',
-                            backgroundClip: 'text',
-                            WebkitBackgroundClip: 'text',
-                            // Repaint on zoom rather than reusing a scaled
-                            // texture layer.
-                            willChange: 'transform',
-                            transform: 'translateZ(0)',
-                            // Fallback for engines without background-clip:
-                            // text stays readable in a flat colour.
                             color: theme.wordmark.top,
-                            WebkitTextFillColor: 'transparent',
+                            // Gradient text fill is temporarily disabled: it
+                            // renders incorrectly at some browser zoom levels
+                            // and the fix was not worth further time here.
+                            // Restore by uncommenting the block below; the
+                            // title falls back to the flat colour above, which
+                            // is readable on its own.
+                            // backgroundImage:
+                            //     `linear-gradient(180deg, ${theme.wordmark.top} 0%, ${theme.wordmark.mid} 55%, ${theme.wordmark.bottom} 100%)`,
+                            // backgroundSize: '100% 100%',
+                            // backgroundClip: 'text',
+                            // WebkitBackgroundClip: 'text',
+                            // willChange: 'transform',
+                            // transform: 'translateZ(0)',
+                            // WebkitTextFillColor: 'transparent',
                         }}
                     >
                         Minesweeper
