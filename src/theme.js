@@ -32,6 +32,13 @@ const theme = createTheme({
         border: 'rgba(255,255,255,0.07)',
     },
     mono: '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace',
+    // Gradient stops for the MINESWEEPER wordmark.
+    wordmark: {
+        top: '#ffffff',
+        mid: '#cfe0f5',
+        bottom: '#7d9cc4',
+        glow: 'rgba(74,158,255,0.18)',
+    },
     typography: {
         fontFamily: '"Space Grotesk", system-ui, -apple-system, sans-serif',
         // Tabular figures keep the mine counter and revealed numbers from

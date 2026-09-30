@@ -35,9 +35,12 @@ export default function CustomSettings({ value, onApply }) {
     }, [value.rows, value.cols, value.mineCount]);
 
     const preview = resolveCustom(draft, value);
-    const dirty = draft.rows !== String(value.rows)
-        || draft.cols !== String(value.cols)
-        || draft.mineCount !== String(value.mineCount);
+    // Compare resolved values, not the raw strings: typing "016" against an
+    // applied "16" is not a change, and Enter would otherwise re-apply
+    // the same board.
+    const dirty = preview.rows !== value.rows
+        || preview.cols !== value.cols
+        || preview.mineCount !== value.mineCount;
 
     // A plain object style, so Emotion can't be relied on for vendor or
     // pseudo-element selectors here. `CSS-in-JS-with-@` would allow nesting,
@@ -78,13 +81,65 @@ export default function CustomSettings({ value, onApply }) {
                 max={max}
                 aria-label={label}
                 className="custom-input"
-                onChange={(e) => setDraft((d) => ({ ...d, [name]: e.target.value }))}
+                onChange={(e) => {
+                    const raw = e.target.value;
+
+                    // Snap to the limit the moment a value is typed past it,
+                    // rather than only clamping on Apply. The field can then
+                    // never hold a value the board cannot use. An empty or
+                    // partially-typed value is left alone so typing still
+                    // works; resolveCustom covers the rest.
+                    if (raw !== '' && /^\d+$/.test(raw)) {
+                        const parsed = Number.parseInt(raw, 10);
+                        if (max !== undefined && parsed > max) {
+                            setDraft((d) => ({ ...d, [name]: String(max) }));
+                            return;
+                        }
+                        if (min !== undefined && parsed < min) {
+                            setDraft((d) => ({ ...d, [name]: String(min) }));
+                            return;
+                        }
+                    }
+
+                    setDraft((d) => ({ ...d, [name]: raw }));
+                }}
+                // The spinners are hidden, so the wheel is the way to nudge a
+                // value. Without this, a focused field swallows the scroll and
+                // the page jumps instead.
+                onWheel={(e) => {
+                    if (e.deltaY === 0) return;
+                    // Only when the cursor is actually over the input; a
+                    // trackpad flick elsewhere shouldn't edit the value.
+                    e.preventDefault();
+                    const step = e.deltaY < 0 ? 1 : -1;
+                    const current = Number.parseInt(draft[name], 10);
+                    const base = Number.isFinite(current) ? current : (min ?? 0);
+                    const next = Math.max(
+                        min ?? Number.NEGATIVE_INFINITY,
+                        Math.min(max ?? Number.POSITIVE_INFINITY, base + step)
+                    );
+                    setDraft((d) => ({ ...d, [name]: String(next) }));
+                }}
+                onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        onApply(preview);
+                    }
+                }}
                 style={inputStyle}
             />
         </label>
     );
 
     const adjusted = preview.mineCount !== Number(draft.mineCount);
+
+    // The mine field's ceiling depends on the current rows/cols, so it has to
+    // be computed here rather than read from CUSTOM_LIMITS. A board always
+    // needs one safe cell, or the first click can never be safe.
+    const maxMines = Math.max(
+        CUSTOM_LIMITS.minMines,
+        preview.rows * preview.cols - 1
+    );
 
     return (
         <Box
@@ -105,7 +160,7 @@ export default function CustomSettings({ value, onApply }) {
             <style>{inputCss}</style>
             {field('rows', 'Rows', CUSTOM_LIMITS.minRows, CUSTOM_LIMITS.maxRows)}
             {field('cols', 'Cols', CUSTOM_LIMITS.minCols, CUSTOM_LIMITS.maxCols)}
-            {field('mineCount', 'Mines', CUSTOM_LIMITS.minMines, undefined)}
+            {field('mineCount', 'Mines', CUSTOM_LIMITS.minMines, maxMines)}
 
             <Button
                 size="small"

@@ -27,8 +27,24 @@ testable outside a browser.
 - `src/game/Grid.js` — model: mine placement, flood fill, win detection. No DOM, no React.
 - `src/game/Cell.js` — single cell state. No DOM, no React.
 - `src/game/difficulties.js` — board size presets plus `resolveCustom()`, which sanitizes player-entered sizes. The fallback path is clamped too, not returned verbatim: a cleared Mines field would otherwise fall back to the previous board's count and produce an unwinnable board.
-- `src/components/` — presentational only. `Board`, `CellButton`, `ControlBar`, `StatusBanner`, `Timer`, `CustomSettings`, `MineIcon`. They receive data and callbacks as props and hold no game state.
+- `src/components/` — presentational only. `Board`, `CellButton`, `ControlBar`, `DifficultySelect`, `ControlsInfo`, `StatusBanner`, `Timer`, `CustomSettings`, `MineIcon`. They receive data and callbacks as props and hold no game state.
+- `src/hooks/useResetShortcut.js` — document-level `R` to reset. Takes a `suspended` flag: `App` passes the controls-dialog state, because the dialog is where `R` is documented and it must not wipe a live game while it is open.
 - `CustomSettings.jsx` uses plain `<input>`s and one inline `<style>`, not MUI's `TextField`. `TextField` pulls in the FormControl/InputLabel/OutlinedInput family, which cost ~80kB for three numeric fields. Emotion can't express vendor pseudo-elements in a plain style object, hence the stylesheet tag.
+
+## Custom board inputs
+
+`CustomSettings` holds a raw string per field while editing so a half-typed
+value isn't clamped out from under the cursor. Two behaviours are deliberate:
+
+- **Typing past a limit snaps to it immediately**, rather than clamping on
+  Apply, so a field can never hold a value the board can't use. Empty and
+  partial input is left alone; `resolveCustom` covers the rest.
+- **Wheel over a focused field steps it by one.** The number spinners are
+  hidden, so the wheel is the only nudge affordance; without `preventDefault`
+  a focused input swallows the scroll and the page jumps instead.
+
+`maxMines` is computed from the current rows/cols rather than read from
+`CUSTOM_LIMITS`, because a board always needs one safe cell.
 
 ## Board sizing
 

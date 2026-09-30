@@ -20,6 +20,12 @@ globalThis.HTMLElement = dom.window.HTMLElement;
 globalThis.Element = dom.window.Element;
 globalThis.Node = dom.window.Node;
 globalThis.MouseEvent = dom.window.MouseEvent;
+// MUI's Popover focus trap reads DOM classes that jsdom exposes on `window` but
+// not as bare globals. Without these, opening the dialog throws.
+globalThis.ShadowRoot = dom.window.ShadowRoot;
+globalThis.DocumentFragment = dom.window.DocumentFragment;
+globalThis.HTMLInputElement = dom.window.HTMLInputElement;
+globalThis.getComputedStyle = dom.window.getComputedStyle.bind(dom.window);
 globalThis.requestAnimationFrame = (cb) => setTimeout(cb, 0);
 globalThis.cancelAnimationFrame = (id) => clearTimeout(id);
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -47,6 +53,18 @@ const $$ = (s) => Array.from(document.querySelectorAll(s));
 const cells = () => $$('#minefield button');
 const counter = () => $('#mine-counter')?.textContent;
 const byText = (t) => $$('button').find((b) => b.textContent.trim() === t);
+const valueOf = (els) => ({
+    rows: els[0]?.value,
+    cols: els[1]?.value,
+    mineCount: els[2]?.value,
+});
+// React tracks a controlled input's previous value, so assigning `.value`
+// directly does not fire onChange. The native setter does.
+const setNative = (el, value) => {
+    const setter = Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value').set;
+    setter.call(el, value);
+    el.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+};
 const results = [];
 const check = (n, c, e = '') => results.push(`${c ? 'PASS' : 'FAIL'} ${n}${e ? ' :: ' + e : ''}`);
 
@@ -54,7 +72,9 @@ const check = (n, c, e = '') => results.push(`${c ? 'PASS' : 'FAIL'} ${n}${e ? '
 check('title renders', $('h1')?.textContent === 'Minesweeper');
 check('81 cells', cells().length === 81, `got ${cells().length}`);
 check('mine counter is 010', counter() === '010', `got "${counter()}"`);
-check('difficulty caption present', /9×9 \/ 10 mines/.test(document.body.textContent));
+// The board-size caption under the title was removed as mostly irrelevant to
+// players who never touch the custom difficulty.
+check('board-size caption is gone', !/9×9 · 10 MINES/.test(document.body.textContent));
 check('no result before end', ($('[role="status"][aria-live]')?.textContent || '') === '');
 check('cells start empty', cells().every((c) => c.textContent.trim() === ''));
 
@@ -173,6 +193,175 @@ check('counter exposes a role', $('#mine-counter')?.getAttribute('role') === 'st
 // Board must not claim the ARIA grid pattern it doesn't implement.
 check('board is a group not a malformed grid',
     !!$('#minefield') && !$('[role="grid"]'));
+
+// --- Layout: readouts above the board, title centered and caps ---
+{
+    const counter = $('#mine-counter');
+    const timer = $('[role="timer"]');
+    const board = $('#minefield');
+    // "Above the board" in DOM order, and all three present.
+    check('mine counter exists', !!counter);
+    check('timer exists', !!timer);
+    check('readouts precede the board in the DOM',
+        !!(counter && timer && board)
+        && !!(counter.compareDocumentPosition(board) & 4)
+        && !!(timer.compareDocumentPosition(board) & 4));
+    // Reset sits between them, which is what the 1fr auto 1fr grid encodes.
+    const resetBtn = $$('button').find((b) => b.textContent.trim() === 'Reset');
+    check('reset sits between the readouts',
+        !!(counter && timer && resetBtn)
+        && !!(counter.compareDocumentPosition(resetBtn) & 4)
+        && !!(resetBtn.compareDocumentPosition(timer) & 4));
+    check('reset advertises its shortcut', resetBtn?.getAttribute('aria-keyshortcuts') === 'R',
+        resetBtn?.getAttribute('aria-keyshortcuts'));
+
+    const title = $('h1');
+    check('there is exactly one h1', document.querySelectorAll('h1').length === 1);
+    check('title text is Minesweeper', title?.textContent === 'Minesweeper', title?.textContent);
+    // Assert the computed style rather than the inline string, per AGENTS.md.
+    const titleCss = dom.window.getComputedStyle(title);
+    check('title is uppercase', titleCss.textTransform === 'uppercase', titleCss.textTransform);
+    check('title is gradient-clipped', titleCss.backgroundClip === 'text', titleCss.backgroundClip);
+    check('title fill is transparent', titleCss.color === 'rgba(0, 0, 0, 0)', titleCss.color);
+    // Trailing tracking skews a centred word to the right; the indent must be
+    // exactly half of it to compensate.
+    const spacing = parseFloat(titleCss.letterSpacing) || 0;
+    const indent = parseFloat(titleCss.textIndent) || 0;
+    check('title indent is half the letter-spacing',
+        spacing > 0 && Math.abs(indent - spacing / 2) < 0.5,
+        `indent ${indent} vs spacing/2 ${spacing / 2}`);
+}
+
+// --- Info popover replaces the old controls paragraph ---
+{
+    const infoBtn = $('[aria-label="Show controls and keyboard shortcuts"]');
+    check('info button exists', !!infoBtn);
+    check('info button is a dialog trigger', infoBtn?.getAttribute('aria-haspopup') === 'dialog');
+    check('info starts collapsed', infoBtn?.getAttribute('aria-expanded') === 'false');
+
+    // The old always-visible instruction paragraph must be gone.
+    const body = document.body.textContent;
+    check('old controls paragraph is removed',
+        !/Left-click to reveal/.test(body) && !/press F to flag/.test(body));
+
+    await act(async () => { infoBtn.click(); });
+    check('info opens the dialog', infoBtn.getAttribute('aria-expanded') === 'true');
+
+    const dialog = $('[role="dialog"]');
+    check('dialog appears', !!dialog);
+    // Read the key cells rather than the flattened text: a bare regex over
+    // the whole string can't tell "F" the shortcut from an "F" in a sentence.
+    const keyLabels = Array.from(dialog?.querySelectorAll('dt') || []).map((e) => e.textContent);
+    check('dialog lists the mouse controls',
+        ['Left click', 'Right click', 'Click a number', 'Middle click'].every((k) => keyLabels.includes(k)),
+        keyLabels.join(' | '));
+    check('dialog lists every keyboard shortcut',
+        ['F', 'C', 'R'].every((k) => keyLabels.includes(k)), keyLabels.join(' | '));
+    const dialogText = dialog?.textContent || '';
+    check('dialog mentions the safe first click',
+        /first click, so it is always safe/.test(dialogText));
+
+    // Clicking the info button again toggles it shut.
+    await act(async () => { infoBtn.click(); });
+    check('dialog closes', infoBtn.getAttribute('aria-expanded') === 'false',
+        `expanded=${infoBtn.getAttribute('aria-expanded')}`);
+
+    // R must stand down while the dialog is open. The dialog is where R is
+    // documented, so pressing it there used to wipe the live game.
+    await act(async () => { cells()[40].click(); });
+    const revealedBeforeInfoR = cells().filter((c) => c.textContent.trim() !== '').length;
+    check('board has progress before the dialog R test', revealedBeforeInfoR > 0,
+        `${revealedBeforeInfoR} visible`);
+    await act(async () => { infoBtn.click(); });
+    await act(async () => {
+        dom.window.document.dispatchEvent(
+            new dom.window.KeyboardEvent('keydown', { key: 'r', bubbles: true })
+        );
+    });
+    check('R does nothing while the controls dialog is open',
+        cells().filter((c) => c.textContent.trim() !== '').length === revealedBeforeInfoR,
+        `${revealedBeforeInfoR} -> ${cells().filter((c) => c.textContent.trim() !== '').length}`);
+    await act(async () => { infoBtn.click(); });
+    check('dialog closed again', infoBtn.getAttribute('aria-expanded') === 'false');
+
+    // With it closed, R works again.
+    await act(async () => {
+        dom.window.document.dispatchEvent(
+            new dom.window.KeyboardEvent('keydown', { key: 'r', bubbles: true })
+        );
+    });
+    check('R works once the dialog is closed',
+        cells().every((c) => c.textContent.trim() === ''));
+}
+
+// --- R resets the board ---
+{
+    await act(async () => { cells()[40].click(); });
+    const revealedBefore = cells().filter((c) => c.textContent.trim() !== '').length;
+    check('board has revealed cells before the R test', revealedBefore > 0, `${revealedBefore} visible`);
+
+    await act(async () => {
+        dom.window.document.dispatchEvent(
+            new dom.window.KeyboardEvent('keydown', { key: 'r', bubbles: true })
+        );
+    });
+    check('R resets the board', cells().every((c) => c.textContent.trim() === ''),
+        `${cells().filter((c) => c.textContent.trim() !== '').length} still visible`);
+
+    // R must not fire while typing in the custom-size fields. Reveal a cell
+    // first, otherwise there is nothing to lose and the guard proves nothing.
+    await act(async () => { $$('button').find((b) => b.textContent.trim() === 'Custom').click(); });
+    await act(async () => { cells()[13].click(); });
+    const field = $('input[type="number"]');
+    const revealedBeforeTyping = cells().filter((c) => c.textContent.trim() !== '').length;
+    check('board has progress before the typing test', revealedBeforeTyping > 0,
+        `${revealedBeforeTyping} visible`);
+    await act(async () => {
+        field.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'r', bubbles: true }));
+    });
+    check('R is ignored while typing in a field',
+        cells().filter((c) => c.textContent.trim() !== '').length === revealedBeforeTyping,
+        `${revealedBeforeTyping} -> ${cells().filter((c) => c.textContent.trim() !== '').length}`);
+
+    // --- Custom field interactions: wheel, clamp, Enter ---
+    const num = () => $$('input[type="number"]');
+    const applyBtn = () => $$('button').find((b) => b.textContent.trim() === 'Apply');
+    const wheel = (el, deltaY) => el.dispatchEvent(
+        new dom.window.WheelEvent('wheel', { deltaY, bubbles: true, cancelable: true }));
+
+    // Wheel up increments, wheel down decrements.
+    const rowsBefore = num()[0].value;
+    await act(async () => { wheel(num()[0], -100); });
+    check('wheel up increments', Number(num()[0].value) === Number(rowsBefore) + 1,
+        `${rowsBefore} -> ${num()[0].value}`);
+    await act(async () => { wheel(num()[0], 100); });
+    check('wheel down decrements', Number(num()[0].value) === Number(rowsBefore),
+        `${rowsBefore} vs ${num()[0].value}`);
+
+    // Typing past a limit snaps to it immediately.
+    await act(async () => { setNative(num()[0], '999'); });
+    check('rows snaps to its max when exceeded', num()[0].value === '30', num()[0].value);
+    await act(async () => { setNative(num()[0], '0'); });
+    check('rows snaps to its min when undercut', num()[0].value === '2', num()[0].value);
+
+    // The mine ceiling follows rows*cols, so it clamps too.
+    await act(async () => { setNative(num()[0], '2'); setNative(num()[1], '2'); });
+    await act(async () => { setNative(num()[2], '999'); });
+    check('mines snap to rows*cols-1', num()[2].value === '3', num()[2].value);
+
+    // Enter applies without touching the button.
+    await act(async () => { setNative(num()[0], '7'); setNative(num()[1], '8'); setNative(num()[2], '9'); });
+    check('apply enables after edits', !applyBtn().disabled);
+    await act(async () => {
+        num()[0].dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    });
+    check('Enter applies the board', cells().length === 56, `${cells().length} cells (expect 7x8)`);
+    check('Enter applied the mine count', counter() === '009', `got "${counter()}"`);
+    check('apply is disabled once applied', applyBtn().disabled);
+}
+
+// Later sections assume a fresh Beginner board.
+await act(async () => { $$('button').find((b) => b.textContent.trim() === 'Beginner').click(); });
 
 // Cell size is a CONSTANT, independent of board size. This is the reported
 // bug: cells used to shrink on wider boards, so an Expert cell was visibly
@@ -374,16 +563,18 @@ check('resolveCustom honours the previous value',
 check('custom difficulty is offered', $$('button').some((b) => b.textContent.trim() === 'Custom'));
 await act(async () => { $$('button').find((b) => b.textContent.trim() === 'Custom').click(); });
 check('custom settings appear', /Rows/.test(document.body.textContent) && /Mines/.test(document.body.textContent));
-check('custom board uses the default size', cells().length === DEFAULT_CUSTOM.rows * DEFAULT_CUSTOM.cols,
-    `${cells().length} cells`);
+// Switching to Custom keeps the last applied custom size rather than
+// resetting to DEFAULT_CUSTOM, which is the intended behaviour.
+{
+    const custom = await vite.ssrLoadModule('/src/game/difficulties.js');
+    const expected = custom.resolveCustom({}, valueOf($$('input[type="number"]')));
+    check('custom board matches the current custom inputs',
+        cells().length === expected.rows * expected.cols,
+        `${cells().length} vs ${expected.rows}x${expected.cols}`);
+}
 
 const numFields = $$('input[type="number"]');
 check('three numeric fields exist', numFields.length === 3, `${numFields.length} found`);
-const setNative = (el, value) => {
-    const setter = Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value').set;
-    setter.call(el, value);
-    el.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
-};
 await act(async () => { setNative(numFields[0], '5'); });
 await act(async () => { setNative(numFields[1], '6'); });
 await act(async () => { setNative(numFields[2], '7'); });

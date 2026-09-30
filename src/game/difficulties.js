@@ -23,7 +23,7 @@ export const CUSTOM_LIMITS = {
     minRows: 2,
     maxRows: 30,
     minCols: 2,
-    maxCols: 40,
+    maxCols: 30,
     minMines: 1,
 };
 

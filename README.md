@@ -16,7 +16,7 @@ Other scripts:
 | Command             | Does                                 |
 | ------------------- | ------------------------------------ |
 | `npm run dev`     | Dev server with hot reload           |
-| `npm run build`   | Production bundle into `dist/`      |
+| `npm run build`   | Production bundle into`dist/`      |
 | `npm run preview` | Serve the built bundle               |
 | `npm test`        | Mounts the UI in jsdom and drives it |
 
@@ -100,9 +100,10 @@ among grey neighbours reads as though the neighbours were safe.
 ### Custom boards
 
 The Custom difficulty takes rows, columns, and mines. Input is clamped to
-2–30 rows, 2–40 columns, and at most `rows × cols - 1` mines, so a board always
-has a safe first click and is always winnable. Out-of-range or unparseable
-values fall back to the previous setting rather than producing a broken board.
+2–30 rows, 2–30 columns, and at most `rows × cols - 1` mines, so a board always
+has a safe first click and is always winnable. Typing past a limit snaps to that
+limit immediately, scrolling the wheel over a field steps it by one, and
+pressing Enter applies the board.
 
 ### `grid.cells[row][col]`
 
@@ -138,17 +139,18 @@ Roughly in the order they'd unblock each other.
 
 ### Make it playable
 
-- [X] Render the board to the DOM
-- [X] Wire up clicks: left click reveals, right click toggles a flag
-- [X] Re-render on state change
-- [X] Show the mine counter and a reset button
-- [X] Display win / game-over state and stop accepting input
-- [X] Difficulty presets (Beginner 9×9/10, Intermediate 16×16/40, Expert 30×16/99)
-- [X] Move the UI to React with Vite and Material UI
-- [x] Keyboard flagging with `f`
-- [x] Chording on a revealed number — click, middle click, right click, or `c`
+- [x] Render the board to the DOM
+- [x] Wire up clicks: left click reveals, right click toggles a flag
+- [x] Re-render on state change
+- [x] Show the mine counter and a reset button
+- [x] Display win / game-over state and stop accepting input
+- [x] Difficulty presets (Beginner 9×9/10, Intermediate 16×16/40, Expert 30×16/99)
+- [x] Move the UI to React with Vite and Material UI
+- [x] Chording — click, middle click, right click, or `c`
+- [x] Keyboard flagging with `f`, chording with `c`, reset with `R`
 - [x] Timer that starts on the first reveal and stops on win or loss
 - [x] Custom difficulty with configurable rows, columns, and mines
+- [x] Controls summary behind an info dialog instead of a permanent paragraph
 - [ ] Long-press to flag on touch devices (right click doesn't exist there)
 - [ ] Mark incorrect flags at game over (a flag on a safe cell)
 
@@ -169,7 +171,6 @@ Roughly in the order they'd unblock each other.
 - [ ] Persist best times per difficulty (the timer now records them per run)
 - [ ] Add a seed input for shareable/reproducible boards
 - [ ] Keyboard navigation and focus management across the board
-- [x] Chording (click, middle click, right click, or `c` on a numbered cell)
 
 ### Testing
 
