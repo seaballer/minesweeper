@@ -65,6 +65,9 @@ export function useMinesweeper(initialDifficulty = DEFAULT_DIFFICULTY) {
             if (grid.status === 'win' || grid.status === 'gameover') {
                 return;
             }
+            // Same guard as revealCell/chord. Without it this indexes the array
+            // directly and dies with a raw TypeError.
+            grid.assertInBounds(row, col);
             grid.cells[row][col].toggleFlag();
             rerender();
         },

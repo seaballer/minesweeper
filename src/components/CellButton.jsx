@@ -2,6 +2,7 @@ import { memo } from 'react';
 import Box from '@mui/material/Box';
 import { useTheme } from '@mui/material/styles';
 import FlagIcon from '@mui/icons-material/Flag';
+import CloseIcon from '@mui/icons-material/Close';
 import MineIcon from './MineIcon.jsx';
 
 // Digit colors tuned for the dark field: light enough to clear AA contrast
@@ -31,6 +32,7 @@ function CellButton({
     isVisible,
     isFlagged,
     isExploded,
+    isWrongFlag,
     neighborMines,
     onReveal,
     onFlag,
@@ -43,6 +45,23 @@ function CellButton({
     if (isVisible) {
         if (isMine) {
             content = <MineIcon size="calc(var(--cell) * 0.66)" />;
+        } else if (isWrongFlag) {
+            // A flag that was wrong: show the cross over the flag it replaced,
+            // so the mistake is visible rather than silently corrected.
+            content = (
+                <Box sx={{ position: 'relative', display: 'flex' }}>
+                    <FlagIcon sx={{ fontSize: 'calc(var(--cell) * 0.5)' }} />
+                    <CloseIcon
+                        sx={{
+                            position: 'absolute',
+                            inset: 0,
+                            margin: 'auto',
+                            fontSize: 'calc(var(--cell) * 0.62)',
+                            color: 'error.main',
+                        }}
+                    />
+                </Box>
+            );
         } else if (neighborMines > 0) {
             content = neighborMines;
         }
@@ -62,6 +81,7 @@ function CellButton({
                   : 'clear'
             : 'hidden',
         isFlagged ? 'flagged' : '',
+        isWrongFlag ? 'wrong flag, this cell was safe' : '',
     ]
         .filter(Boolean)
         .join(', ');
@@ -171,7 +191,9 @@ function CellButton({
                       ? 'transparent'
                       : isMine
                         ? 'board.mineTint'
-                        : 'board.revealed',
+                        : isWrongFlag
+                          ? 'rgba(255,90,82,0.10)'
+                          : 'board.revealed',
                 ...(raised && {
                     backgroundImage: `linear-gradient(180deg, ${theme.board.keyTop} 0%, ${theme.board.keyBottom} 100%)`,
                 }),

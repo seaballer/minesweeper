@@ -764,6 +764,112 @@ check(
     );
 }
 
+// --- Out-of-range coordinates are validated ---
+{
+    const g = new Grid(5, 5, 3, 1);
+    g.initialize();
+    const bad = [
+        [99, 99],
+        [-1, 0],
+        [0, -1],
+        [5, 0],
+        [0, 5],
+        [1.5, 2],
+        [NaN, 0],
+    ];
+    let allThrowRange = true;
+    let messagesUseful = true;
+    for (const [r, c] of bad) {
+        try {
+            g.revealCell(r, c);
+            allThrowRange = false;
+        } catch (e) {
+            if (!(e instanceof RangeError)) allThrowRange = false;
+            // The message must name the board and the valid range, so the cause
+            // is obvious without reading the source.
+            if (!/5x5/.test(e.message) || !/0\.\.4/.test(e.message)) {
+                messagesUseful = false;
+            }
+        }
+    }
+    check('out-of-range reveal throws a RangeError', allThrowRange);
+    check('the error names the board and the valid range', messagesUseful);
+
+    let chordThrows = false;
+    try {
+        g.chord(99, 1);
+    } catch (e) {
+        chordThrows = e instanceof RangeError;
+    }
+    check('out-of-range chord throws a RangeError', chordThrows);
+    check(
+        'bad input leaves the board untouched',
+        g.cells.flat().every((c) => !c.isVisible && !c.isMine)
+    );
+    check('valid coordinates still work', g.revealCell(2, 2) === 'playing');
+}
+
+// --- Wrong flags are marked at game over ---
+{
+    const g = new Grid(5, 5, 3, 1);
+    g.initialize();
+    [
+        [2, 2],
+        [4, 4],
+    ].forEach(([r, c]) => g.cells[r][c].placeMine());
+    g.cells[0][0].placeMine();
+    g.countNeighborMines();
+    g.minesPlaced = true;
+    // One correct flag on a real mine, one wrong flag on a safe cell.
+    g.cells[2][2].toggleFlag();
+    g.cells[1][1].toggleFlag();
+    check('no wrong flags before the game ends', !g.cells[1][1].isWrongFlag);
+
+    let mine = null;
+    g.cells.forEach((r, i) =>
+        r.forEach((c, j) => {
+            if (c.isMine && !mine) mine = [i, j];
+        })
+    );
+    g.revealCell(0, 0);
+    g.revealCell(mine[0], mine[1]);
+    check('the game is over', g.status === 'gameover', g.status);
+    check('a flag on a safe cell is marked wrong', g.cells[1][1].isWrongFlag);
+    check('a wrong flag is uncovered so the mistake is visible', g.cells[1][1].isVisible);
+    check('a correct flag is not marked wrong', !g.cells[2][2].isWrongFlag);
+    check('a correct flag is still shown', g.cells[2][2].isFlagged);
+
+    // Clearing the flag clears the marker, so it cannot outlive its cause.
+    const c2 = new Grid(4, 4, 2, 1);
+    c2.initialize();
+    c2.cells[0][0].placeMine();
+    c2.countNeighborMines();
+    c2.minesPlaced = true;
+    c2.cells[1][1].toggleFlag();
+    c2.cells[1][1].isWrongFlag = true;
+    c2.cells[1][1].toggleFlag();
+    check('unflagging clears the wrong-flag marker', !c2.cells[1][1].isWrongFlag);
+}
+
+// A wrong flag on a fresh board is impossible to survive to a win: a flagged
+// cell is never revealed, so winning means none were flagged.
+{
+    const w = new Grid(2, 2, 1, 1);
+    w.initialize();
+    // Place the mine explicitly so the win path is deterministic.
+    w.cells[1][1].placeMine();
+    w.countNeighborMines();
+    w.minesPlaced = true;
+    w.revealCell(0, 0);
+    w.revealCell(0, 1);
+    w.revealCell(1, 0);
+    check(
+        'no wrong flags on a won board',
+        w.status === 'win' && w.cells.flat().every((c) => !c.isWrongFlag),
+        w.status
+    );
+}
+
 check(
     'every status path returns a string, never undefined',
     (() => {

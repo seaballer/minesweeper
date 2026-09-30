@@ -102,9 +102,10 @@ An empty string means the value was rejected. `npm test` asserts this too.
 - `grid.status` is `"ready" | "playing" | "win" | "gameover"`. Once `win` or `gameover`, the game is terminal: further `revealCell` calls return that status and don't change the board.
 - Flood fill skips flagged and mined cells, and doesn't expand through them.
 - On a 1×1 board with 1 mine there is no safe first cell, so the opening click loses. Unavoidable, not a bug — but `CUSTOM_LIMITS` starts at 2×2 so the custom UI can't produce one.
-- Out-of-range coordinates throw a raw `TypeError`; there is no bounds checking.
+- Coordinate entry points (`revealCell`, `chord`, and the UI's `toggleFlag`) call `assertInBounds` and throw a `RangeError` naming the board size and valid range. Out of range is a caller bug, not a game state, so it throws rather than being silently ignored — an ignored bad coordinate would make a cell quietly unclickable with no signal.
 - `remainingSafeCells` only decrements when `Cell.reveal()` returns `true`. Win is an exact `=== 0` check.
 - `revealAllMines(explodedRow, explodedCol)` uncovers every mine. On a loss it marks the whole **connected** mine cluster around the detonation (mine → adjacent mine → …) as `isExploded`, not just the clicked cell — after a chording detonation, one red cell among grey ones reads as if the neighbours were safe. On a win nothing is marked.
+- `revealAllMines` also marks **wrong flags**: a flagged cell that was not a mine is uncovered and flagged `isWrongFlag`, rendered as a cross over the flag. Correctly-placed flags are untouched. A win can never contain one, since a flagged cell is never revealed.
 - `chord(row, col)` reveals the hidden neighbors of a revealed number once its flagged-neighbor count matches. It no-ops on zero cells, hidden cells, mines, and mismatched flag counts, and delegates each reveal to `revealCell` so `remainingSafeCells` and flood fill stay owned by one code path. Chording is still a guess: flagging a safe cell and leaving the real mine unflagged will detonate it.
 - `placeMines` is a seeded Fisher-Yates shuffle (`mulberry32`). `mineCount` is clamped to `rows * cols`.
 

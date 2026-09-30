@@ -119,6 +119,35 @@ export class Grid {
         }
     }
 
+    isInBounds(row, col) {
+        return (
+            Number.isInteger(row) &&
+            Number.isInteger(col) &&
+            row >= 0 &&
+            row < this.rows &&
+            col >= 0 &&
+            col < this.cols
+        );
+    }
+
+    // Guards every coordinate entry point. Previously an out-of-range click
+    // fell through to `this.cells[row][col].isVisible` and died with
+    // "Cannot read properties of undefined", which says nothing about the real
+    // problem. Out of range is a bug in the caller, not a game state, so it
+    // throws rather than being silently ignored.
+    assertInBounds(row, col) {
+        if (!this.isInBounds(row, col)) {
+            throw new RangeError(
+                `Cell (${row}, ${col}) is outside a ${this.rows}x${this.cols} board; ` +
+                    'expected integer row 0..' +
+                    (this.rows - 1) +
+                    ' and col 0..' +
+                    (this.cols - 1) +
+                    '.'
+            );
+        }
+    }
+
     getNeighbors(row, col) {
         const neighbors = [];
         const dx = [-1, -1, -1, 0, 0, 1, 1, 1];
@@ -149,6 +178,8 @@ export class Grid {
     // status rather than nothing: the board is unchanged, so the status is
     // simply whatever it already was.
     chord(row, col) {
+        this.assertInBounds(row, col);
+
         if (this.status === 'win' || this.status === 'gameover') {
             return this.status;
         }
@@ -205,6 +236,8 @@ export class Grid {
     // status rather than nothing. The board is unchanged, so "playing" is
     // simply true, and a caller never has to special-case undefined.
     revealCell(row, col) {
+        this.assertInBounds(row, col);
+
         // Once the game is decided it stops accepting input, so a won game
         // can't be flipped to a loss by clicking a revealed mine.
         if (this.status === 'win' || this.status === 'gameover') {
@@ -258,7 +291,14 @@ export class Grid {
         for (let i = 0; i < this.rows; i++) {
             for (let j = 0; j < this.cols; j++) {
                 const cell = this.cells[i][j];
+
                 if (cell.isMine) {
+                    cell.reveal();
+                } else if (cell.isFlagged) {
+                    // A flag on a safe cell is a mistake. Uncover it and mark
+                    // it, so the final board shows which guesses were wrong
+                    // rather than leaving a flag on empty space.
+                    cell.isWrongFlag = true;
                     cell.reveal();
                 }
             }

@@ -64,6 +64,7 @@ export default function Board({ grid, onReveal, onFlag, onChord, disabled }) {
                         isVisible={cell.isVisible}
                         isFlagged={cell.isFlagged}
                         isExploded={cell.isExploded}
+                        isWrongFlag={cell.isWrongFlag}
                         neighborMines={cell.neighborMines}
                         onReveal={onReveal}
                         onFlag={onFlag}
