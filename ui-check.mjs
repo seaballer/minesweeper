@@ -449,8 +449,199 @@ check(
     `role=${$('#mine-counter')?.getAttribute('role')}`
 );
 
-// Board must not claim the ARIA grid pattern it doesn't implement.
-check('board is a group not a malformed grid', !!$('#minefield') && !$('[role="grid"]'));
+// --- Board semantics and keyboard navigation ---
+//
+// The board is an ARIA grid, and that is only honest because it implements the
+// pattern: owned rows and gridcells, and 2-D arrow-key navigation. It was
+// `role="group"` for exactly as long as that structure was missing.
+{
+    const board = $('#minefield');
+    check(
+        'the board is a grid',
+        board?.getAttribute('role') === 'grid',
+        board?.getAttribute('role')
+    );
+    check(
+        'the grid declares its size',
+        board?.getAttribute('aria-rowcount') === '9' &&
+            board?.getAttribute('aria-colcount') === '9',
+        `${board?.getAttribute('aria-rowcount')}x${board?.getAttribute('aria-colcount')}`
+    );
+    check(
+        'the grid owns one row per board row',
+        $$('#minefield [role="row"]').length === 9,
+        `${$$('#minefield [role="row"]').length} rows`
+    );
+    check(
+        'every cell is a gridcell',
+        $$('#minefield [role="gridcell"]').length === 81,
+        `${$$('#minefield [role="gridcell"]').length} cells`
+    );
+    check(
+        'every cell belongs to a row',
+        $$('#minefield [role="row"] [role="gridcell"]').length === 81
+    );
+
+    // Roving tabindex: one tab stop, not eighty-one.
+    const tabbable = () => $$('#minefield [role="gridcell"]').filter((c) => c.tabIndex === 0);
+    check(
+        'exactly one cell is in the tab order',
+        tabbable().length === 1,
+        `${tabbable().length} tabbable`
+    );
+    check(
+        'it starts at the top left',
+        tabbable()[0]?.getAttribute('data-cell') === '0-0',
+        tabbable()[0]?.getAttribute('data-cell')
+    );
+
+    // Arrow keys move focus, and the tab stop travels with it.
+    const focusedCell = () => document.activeElement?.getAttribute?.('data-cell') ?? null;
+    const press = async (key, init = {}) => {
+        await act(async () => {
+            document.activeElement.dispatchEvent(
+                new dom.window.KeyboardEvent('keydown', {
+                    key,
+                    bubbles: true,
+                    cancelable: true,
+                    ...init,
+                })
+            );
+        });
+    };
+
+    tabbable()[0].focus();
+    check('the tab stop holds focus', focusedCell() === '0-0', focusedCell());
+
+    for (const [key, expected] of [
+        ['ArrowRight', '0-1'],
+        ['ArrowRight', '0-2'],
+        ['ArrowDown', '1-2'],
+        ['ArrowLeft', '1-1'],
+        ['ArrowUp', '0-1'],
+    ]) {
+        await press(key);
+        check(
+            `arrow ${key} moves focus`,
+            focusedCell() === expected,
+            `${focusedCell()} (wanted ${expected})`
+        );
+    }
+    check(
+        'the tab stop follows the focus',
+        tabbable()[0]?.getAttribute('data-cell') === '0-1',
+        tabbable()[0]?.getAttribute('data-cell')
+    );
+    check('still only one tab stop', tabbable().length === 1);
+
+    await press('ArrowUp');
+    check('focus clamps at the top edge', focusedCell() === '0-1', focusedCell());
+    await press('ArrowLeft');
+    check('focus clamps at the left edge', focusedCell() === '0-0', focusedCell());
+
+    await press('End');
+    check('End goes to the end of the row', focusedCell() === '0-8', focusedCell());
+    await press('Home');
+    check('Home goes to the start of the row', focusedCell() === '0-0', focusedCell());
+    await press('End', { ctrlKey: true });
+    check('Ctrl+End goes to the last cell', focusedCell() === '8-8', focusedCell());
+    await press('Home', { ctrlKey: true });
+    check('Ctrl+Home goes to the first cell', focusedCell() === '0-0', focusedCell());
+    await press('PageDown');
+    check('PageDown jumps four rows', focusedCell() === '4-0', focusedCell());
+    await press('PageUp');
+    check('PageUp jumps back', focusedCell() === '0-0', focusedCell());
+
+    // An arrow key must not also scroll the page away underneath the cursor.
+    let scrolled = true;
+    await act(async () => {
+        document.activeElement.dispatchEvent(
+            new dom.window.KeyboardEvent('keydown', {
+                key: 'ArrowDown',
+                bubbles: true,
+                cancelable: true,
+            })
+        );
+        scrolled = document.activeElement.dispatchEvent(
+            new dom.window.KeyboardEvent('keydown', {
+                key: 'ArrowDown',
+                bubbles: true,
+                cancelable: true,
+            })
+        );
+    });
+    check(
+        'an arrow key at the grid is consumed, not scrolled',
+        scrolled === false,
+        `defaultPrevented=${scrolled}`
+    );
+
+    // Focus that arrives from outside the arrow keys — by click, or by Tab
+    // re-entering — also moves the tab stop, so Tab leaves the board from
+    // wherever the player last was. Driven with `focus()` rather than `click()`
+    // because jsdom's `click()` dispatches the event without moving focus, so it
+    // would be testing the shim. That a real click focuses the button is the
+    // browser's job, verified in the browser checks.
+    await act(async () => {
+        $$('#minefield [role="gridcell"]')[30].focus();
+    });
+    check(
+        'focusing a cell moves the tab stop to it',
+        tabbable()[0]?.getAttribute('data-cell') === '3-3',
+        tabbable()[0]?.getAttribute('data-cell')
+    );
+
+    // The per-cell shortcuts still work from the keyboard.
+    const flagTarget = $$('#minefield [role="gridcell"]').find(
+        (c) =>
+            !/flagged/.test(c.getAttribute('aria-label') || '') &&
+            !/hidden/.test(c.getAttribute('aria-label') || '') === false
+    );
+    if (flagTarget) {
+        const beforeFlag = counter();
+        await act(async () => {
+            flagTarget.dispatchEvent(
+                new dom.window.KeyboardEvent('keydown', {
+                    key: 'f',
+                    bubbles: true,
+                    cancelable: true,
+                })
+            );
+        });
+        check(
+            'f still flags from the keyboard',
+            counter() !== beforeFlag,
+            `${beforeFlag} -> ${counter()}`
+        );
+    }
+
+    // A smaller board must still leave exactly one tab stop in range.
+    await act(async () => {
+        byText('Custom').click();
+    });
+    await act(async () => {
+        setNative($('input[aria-label="Rows"]'), '3');
+    });
+    await act(async () => {
+        byText('Apply').click();
+    });
+    check(
+        'a smaller board still has one tab stop',
+        tabbable().length === 1,
+        `${tabbable().length} tabbable`
+    );
+    check(
+        'and it is inside the smaller board',
+        (() => {
+            const where = tabbable()[0]?.getAttribute('data-cell')?.split('-').map(Number);
+            return !!where && where[0] < 3 && where[1] < 4;
+        })(),
+        tabbable()[0]?.getAttribute('data-cell')
+    );
+    await act(async () => {
+        byText('Beginner').click();
+    });
+}
 
 // --- Layout: readouts above the board, title centered and caps ---
 {

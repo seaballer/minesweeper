@@ -50,6 +50,8 @@ function CellButton({
     onFlag,
     onChord,
     disabled,
+    tabIndex = 0,
+    cellRef,
 }) {
     const theme = useTheme();
 
@@ -214,6 +216,17 @@ function CellButton({
         <Box
             component="button"
             type="button"
+            // Roving tabindex, set by Board: exactly one cell is tabbable so Tab
+            // enters the grid once instead of walking every cell. Arrow keys
+            // move between them, since the board is the tab stop.
+            tabIndex={tabIndex}
+            // "row-col", so Board's key handler can find a cell to focus
+            // without walking the list.
+            {...(cellRef ? { 'data-cell': cellRef } : {})}
+            // The cell is the grid's widget, so it carries the gridcell role its
+            // owning row expects. The button stays focusable and activatable, so
+            // Enter and Space still reveal and chord.
+            role={cellRef ? 'gridcell' : undefined}
             onPointerDown={onPointerDown}
             onPointerLeave={() => {
                 // A press that started here but ended elsewhere gets no click at

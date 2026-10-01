@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, useCallback, useRef, useState } from 'react';
 import Box from '@mui/material/Box';
 import { useTheme } from '@mui/material/styles';
 import CellButton from './CellButton.jsx';
@@ -31,15 +31,89 @@ export { GAP, BOARD_CHROME, PAD, BORDER, CELL };
  */
 function Board({ grid, version: _version, onReveal, onFlag, onChord, disabled }) {
     const theme = useTheme();
+    const boardRef = useRef(null);
+
+    // Roving tabindex. Exactly one cell is in the page's tab order at a time, so
+    // Tab enters the board once, arrows move within it, and Tab then leaves —
+    // instead of tabbing through 81 or 480 buttons. Every cell stays focusable
+    // programmatically; only one is reachable by Tab.
+    const [cursor, setCursor] = useState({ row: 0, col: 0 });
+
+    // A new board is a new set of cells, so the cursor goes home. Keyed on the
+    // grid instance, not on `version`: that changes on every move.
+    //
+    // Clamped at read time rather than reset by an effect: an effect calling
+    // setState here would cascade a render, and React's guidance is to adjust
+    // state during render instead. Clamping also means a smaller board keeps you
+    // near where you were, and — the reason it matters — can never leave the
+    // grid with no tabbable cell at all.
+    const cursorRow = Math.min(cursor.row, grid.rows - 1);
+    const cursorCol = Math.min(cursor.col, grid.cols - 1);
+
+    const focusCell = useCallback(
+        (row, col) => {
+            const next = {
+                row: Math.min(Math.max(row, 0), grid.rows - 1),
+                col: Math.min(Math.max(col, 0), grid.cols - 1),
+            };
+            setCursor(next);
+            boardRef.current?.querySelector(`[data-cell="${next.row}-${next.col}"]`)?.focus();
+        },
+        [grid.rows, grid.cols]
+    );
+
+    // Focus can arrive by click or by Tab, not only by arrow, so the cursor
+    // follows whatever actually holds focus. React's onFocus bubbles.
+    const onFocus = (event) => {
+        const where = event.target?.dataset?.cell;
+        if (!where) return;
+        const [row, col] = where.split('-').map(Number);
+        setCursor({ row, col });
+    };
+
+    const onKeyDown = (event) => {
+        // PageUp/PageDown jump four rows, which is a comfortable sweep on a
+        // 30px cell without overshooting a small board.
+        const moves = {
+            ArrowUp: [-1, 0],
+            ArrowDown: [1, 0],
+            ArrowLeft: [0, -1],
+            ArrowRight: [0, 1],
+            PageUp: [-4, 0],
+            PageDown: [4, 0],
+        };
+        const move = moves[event.key];
+        if (move) {
+            // The board would otherwise scroll the page as the cursor runs off
+            // the edge, and the clamped cell would never get the key.
+            event.preventDefault();
+            focusCell(cursorRow + move[0], cursorCol + move[1]);
+            return;
+        }
+        if (event.key === 'Home' || event.key === 'End') {
+            event.preventDefault();
+            const last = event.key === 'End';
+            const jumpAll = event.ctrlKey || event.metaKey;
+            focusCell(jumpAll ? (last ? grid.rows - 1 : 0) : cursorRow, last ? grid.cols - 1 : 0);
+            return;
+        }
+        // Everything else — 'f', 'c', Enter, Space — belongs to the cell itself.
+    };
+
     return (
         <Box
-            // `group`, not `grid`: a real ARIA grid requires owned row/gridcell
-            // elements and 2-D arrow-key navigation, which this doesn't
-            // implement. `group` labels the set without promising a structure
-            // that isn't there.
+            // A real ARIA grid, which this now is: owned rows and gridcells, and
+            // 2-D arrow-key navigation. It was `group` before precisely because
+            // that structure was missing, and the roles below were not claimed
+            // until it existed.
             id="minefield"
-            role="group"
+            role="grid"
             aria-label="Minefield"
+            aria-rowcount={grid.rows}
+            aria-colcount={grid.cols}
+            ref={boardRef}
+            onFocus={onFocus}
+            onKeyDown={onKeyDown}
             sx={{
                 display: 'grid',
                 // `--cell` is the single source of truth for cell size, read by
@@ -73,25 +147,34 @@ function Board({ grid, version: _version, onReveal, onFlag, onChord, disabled })
                 width: 'fit-content',
             }}
         >
-            {grid.cells.map((row, rowIndex) =>
-                row.map((cell, colIndex) => (
-                    <CellButton
-                        key={`${rowIndex}-${colIndex}`}
-                        row={rowIndex}
-                        col={colIndex}
-                        isMine={cell.isMine}
-                        isVisible={cell.isVisible}
-                        isFlagged={cell.isFlagged}
-                        isExploded={cell.isExploded}
-                        isWrongFlag={cell.isWrongFlag}
-                        neighborMines={cell.neighborMines}
-                        onReveal={onReveal}
-                        onFlag={onFlag}
-                        onChord={onChord}
-                        disabled={disabled}
-                    />
-                ))
-            )}
+            {grid.cells.map((row, rowIndex) => (
+                // `display: contents` so the row owns the semantics without
+                // owning a box — the cells stay direct children of the CSS grid,
+                // so the track and gap arithmetic above is untouched.
+                <Box key={rowIndex} role="row" sx={{ display: 'contents' }}>
+                    {row.map((cell, colIndex) => (
+                        <CellButton
+                            key={`${rowIndex}-${colIndex}`}
+                            row={rowIndex}
+                            col={colIndex}
+                            isMine={cell.isMine}
+                            isVisible={cell.isVisible}
+                            isFlagged={cell.isFlagged}
+                            isExploded={cell.isExploded}
+                            isWrongFlag={cell.isWrongFlag}
+                            neighborMines={cell.neighborMines}
+                            onReveal={onReveal}
+                            onFlag={onFlag}
+                            onChord={onChord}
+                            disabled={disabled}
+                            // Roving tabindex: one cell is tabbable, the rest
+                            // are reachable only by arrow keys or script.
+                            tabIndex={cursorRow === rowIndex && cursorCol === colIndex ? 0 : -1}
+                            cellRef={`${rowIndex}-${colIndex}`}
+                        />
+                    ))}
+                </Box>
+            ))}
         </Box>
     );
 }

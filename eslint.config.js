@@ -37,8 +37,9 @@ export default [
         },
     },
     {
-        // The test harness runs in Node and drives a jsdom document.
-        files: ['ui-check.mjs'],
+        // The harnesses run in Node. `ui-check.mjs` drives a jsdom document;
+        // `test/` is the plain model unit suite.
+        files: ['ui-check.mjs', 'test/**/*.js'],
         languageOptions: {
             globals: {
                 ...globals.node,

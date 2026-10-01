@@ -9,7 +9,8 @@ testable outside a browser.
 - `npm run dev` — Vite dev server on <http://localhost:5173>
 - `npm run build` — production bundle into `dist/`
 - `npm run preview` — serve the built bundle
-- `npm test` — mounts the components in jsdom and drives them (283 assertions)
+- `npm test` — both suites: the jsdom UI harness (310 assertions) and the model unit tests
+- `npm run test:model` — just `node --test test/`, the model suite on its own (33 tests)
 - `npm run lint` — ESLint (`react-hooks` rules included). Must be clean before committing.
 - `npm run format` / `npm run format:check` — Prettier. The config matches the
   existing style: 4-space indent, single quotes, 100 columns.
@@ -36,6 +37,40 @@ testable outside a browser.
 - `src/components/` — presentational only. `Board`, `CellButton`, `ControlBar`, `DifficultySelect`, `ControlsInfo`, `BestTimes`, `StatusBanner`, `Timer`, `CustomSettings`, `MineIcon`. They receive data and callbacks as props and hold no game state.
 - `src/hooks/useResetShortcut.js` — document-level `R` to reset. Takes a `suspended` flag: `App` passes the controls-dialog state, because the dialog is where `R` is documented and it must not wipe a live game while it is open.
 - `CustomSettings.jsx` uses plain `<input>`s and one inline `<style>`, not MUI's `TextField`. `TextField` pulls in the FormControl/InputLabel/OutlinedInput family, which cost ~80kB for three numeric fields. Emotion can't express vendor pseudo-elements in a plain style object, hence the stylesheet tag. The `Seed?` checkbox is plain for the same reason: MUI's `Checkbox` would drag in the SwitchBase family for one control. `accentColor` themes the tick instead.
+
+## Keyboard navigation and focus
+
+`Board` is a roving-tabindex grid. **The board is one tab stop, not one per
+cell** — without that, Tab would walk 81 buttons on Beginner and 480 on Expert.
+
+- **Roving tabindex.** Exactly one cell carries `tabIndex={0}`; the rest are
+  `-1`, so they are still focusable by script and by arrow keys but unreachable
+  by Tab. `npm test` asserts there is exactly one.
+- **The cursor is clamped at read time, not reset by an effect.** `cursorRow` and
+  `cursorCol` are `Math.min` against the board's dimensions on every render, so
+  shrinking the board can never leave the grid with no tabbable cell. Resetting
+  it in a `useEffect` would also mean a `setState` inside an effect, which
+  cascades a render and trips `react-hooks/set-state-in-effect`.
+- **Focus follows focus.** `onFocus` on the grid re-points the cursor at
+  whatever actually holds focus, so the tab stop follows a click or a Tab as well
+  as an arrow. Without it, Tab would leave the board from wherever the cursor
+  happened to be rather than where the player was.
+- **`onKeyDown` claims only the navigation keys** and `preventDefault`s them, so
+  running the cursor off an edge cannot scroll the page out from under it.
+  `f`, `c`, Enter and Space fall through to the cell, which handles them.
+- **Keys:** arrows move one cell, `PageUp`/`PageDown` jump four rows, `Home` and
+  `End` go to the ends of the current row, `Ctrl`/`Cmd` with either jumps to the
+  first or last cell of the board. Movement clamps rather than wrapping.
+- **Rows are `display: contents`.** A row owns its semantics without owning a
+  box, so the cells stay direct children of the CSS grid and the
+  `gridTemplateColumns` / `gap` arithmetic is untouched. Verified over CDP that
+  the rows and all 81 gridcells do reach the accessibility tree despite it,
+  which is the thing that would have made the `grid` role a lie.
+
+**jsdom's `click()` does not move focus** — it dispatches the event and leaves
+`document.activeElement` alone. Driving a focus test with it tests the shim, so
+the harness uses `.focus()`. That a real click focuses the button is the
+browser's behaviour, and is asserted in the Chromium checks.
 
 ## Best times
 
@@ -78,6 +113,34 @@ app has no backend, so "the database" is `localStorage` and nothing else.
 shrinking that preset to 3×3 with a single mine and then solving it: with one
 mine, a hidden cell that touches no revealed positive number is provably safe.
 The preset is restored in a `finally`.
+
+## The model has no DOM and no React, so it gets `node:test`
+
+`src/game/` is plain ES modules, so it imports straight into Node — no jsdom, no
+Vite, no mounting. `test/model.test.js` runs under `node:test` with
+`node:assert/strict`, and `npm test` runs it after the UI harness.
+
+The split matters: `ui-check.mjs` is for what the _interface_ does and has to
+mount everything to observe it; this suite is for rules and arithmetic, where
+mounting would only make failures harder to read. `placeMines` determinism and
+exact mine count, `countNeighborMines`, flood-fill boundaries, win detection, the
+flag tally, chording, and the shared coordinate contracts are all covered here.
+
+Several of these tests were written wrong first and had to be corrected against
+the model, which is the point of having them:
+
+- **Opening a cell that is a `0` cascades, so a "numbered cell opens only itself"
+  test needs a cell that actually touches a mine.** The 3×3 I first picked had
+  the opening cell two steps from its mine.
+- **A flagged cell cannot be revealed**, so a loss cannot be triggered by
+  revealing the cell that carries the correct flag. It takes a second mine.
+- **A wrong flag is permanent.** Marking one wrong also reveals that cell, and a
+  revealed cell refuses to be flagged or unflagged — so the mistake cannot be
+  tidied away. The board at game over is final, which is the better behaviour
+  than the one the test originally asserted.
+- **A chord can win the board**, and a win uncovers every mine. So "chording
+  never reveals a mine" is not a safe blanket assertion; the test pins the
+  narrower, always-true contract instead — the flags come back untouched.
 
 ## Custom board inputs
 
@@ -376,7 +439,7 @@ on press would reveal the very cell the long press exists to flag.
 - `.jsx` for components, `.js` for plain modules. Named exports, function components, 4-space indent.
 - Styling is MUI `sx` props against theme tokens. `src/index.css` is the only stylesheet and is limited to the page shell. Don't add component CSS.
 - Colors come from `theme.js` — `board.*`, the palette, and `theme.mono`. A hardcoded hex in a component is a regression; it drifts the moment a token changes. **The `board.*` tokens must be interpolated from `useTheme()`, never written as a dotted `sx` string** — see the silent-failure trap below, because the string form is dropped by the browser without complaint.
-- The board uses `role="group"`, not `role="grid"`. A real ARIA grid needs owned `row`/`gridcell` elements and 2-D arrow-key navigation, which this doesn't implement. Don't upgrade the role without also building the pattern.
+- The board is a real ARIA `grid`, with owned `row` and `gridcell` elements and 2-D arrow-key navigation. It was `role="group"` for exactly as long as that structure was missing — **if you take the navigation away, put the role back to `group`**, because a `grid` that does not move focus in two dimensions is a promise the app is not keeping.
 - The result banner and the mine counter are persistent live regions (`role="status"`). Keep them mounted: a live region that appears with its own content is usually silent.
 - Grid uses 4-space indent and no trailing newline on its final brace. Match surrounding style rather than reformatting files you touch.
 

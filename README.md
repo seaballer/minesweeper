@@ -3,8 +3,10 @@
 A browser Minesweeper. React 19 and Material UI 9 on Vite 8; the rules live in a
 plain ES-module JavaScript model with no React or MUI imports.
 
-> **Status: playable.** The game logic and the UI both work. See
-> [To-do](#to-do) for the open work.
+> **Status: playable and feature-complete for a solo game.** Presets and a custom
+> board, seeded shareable layouts, chording, flagging, a per-difficulty best-times
+> leaderboard, and full keyboard play. See
+> [To-do](#to-do) for what is left.
 
 ## Running it
 
@@ -15,15 +17,16 @@ npm install     # first time only
 npm run dev     # http://localhost:5173
 ```
 
-| Command                | Does                                                  |
-| ---------------------- | ----------------------------------------------------- |
-| `npm run dev`          | Dev server with hot reload                            |
-| `npm run build`        | Production bundle into`dist/`                         |
-| `npm run preview`      | Serve the built bundle                                |
-| `npm test`             | Mounts the UI in jsdom and drives it (283 assertions) |
-| `npm run lint`         | ESLint,`react-hooks` rules included                   |
-| `npm run format`       | Prettier, writes in place                             |
-| `npm run format:check` | Prettier, reports only                                |
+| Command                | Does                                                          |
+| ---------------------- | ------------------------------------------------------------- |
+| `npm run dev`          | Dev server with hot reload                                    |
+| `npm run build`        | Production bundle into`dist/`                                 |
+| `npm run preview`      | Serve the built bundle                                        |
+| `npm test`             | Both suites: the UI in jsdom (310 assertions), then the model |
+| `npm run test:model`   | Just the model unit tests (33) — no browser, no jsdom         |
+| `npm run lint`         | ESLint,`react-hooks` rules included                           |
+| `npm run format`       | Prettier, writes in place                                     |
+| `npm run format:check` | Prettier, reports only                                        |
 
 `node_modules/`, `dist/`, and `.opencode/` are gitignored. Never commit them.
 
@@ -42,7 +45,9 @@ index.html
 vite.config.js
 eslint.config.js
 .prettierrc.json
-ui-check.mjs               npm test: jsdom + Vite SSR, drives the real components
+ui-check.mjs               The UI harness: jsdom + Vite SSR, drives real components
+test/
+  model.test.js            node:test unit tests for the model; no browser, no jsdom
 src/
   main.jsx                 React entry; mounts App in ThemeProvider + CssBaseline
   App.jsx                  Layout only, no game logic
@@ -64,7 +69,8 @@ src/
     ControlBar.jsx         Mine counter, reset, timer
     DifficultySelect.jsx   Preset switcher
     ControlsInfo.jsx       Info button and its controls popover
-    CustomSettings.jsx     Rows / cols / mines inputs
+    BestTimes.jsx          Trophy button and the best-times popover
+    CustomSettings.jsx     Rows / cols / mines / seed inputs
     StatusBanner.jsx       Win / loss message
     Timer.jsx              Elapsed time
     MineIcon.jsx           Inline SVG mine glyph
@@ -76,12 +82,21 @@ Three layers, and the boundary between them is the point:
 - `hooks/useMinesweeper.js` is the controller. It owns the `Grid` instance and
   is the only thing that mutates it.
 - `components/` are presentational. Props in, callbacks out, no state of their
-  own.
+  own. `Board` is the one place that holds a little of its own state — the
+  keyboard cursor — which is view state, not game state.
 
-`ui-check.mjs` is the test harness. It stands up jsdom, loads `App` through Vite
-SSR so JSX compiles, and drives it with real clicks — 283 assertions, no browser.
-It imports `GAP`, `BOARD_CHROME`, and `CELL` from `Board.jsx` so it asserts the
-same sizing arithmetic the CSS encodes rather than a hand-copied version.
+Two test suites, split by what each can observe:
+
+- `test/model.test.js` imports `src/game/` straight into Node and asserts the
+  rules: `placeMines` determinism and exact mine count, `countNeighborMines`,
+  flood-fill boundaries, win detection, the flag tally, chording, and the
+  coordinate contracts. No mounting, so a failure points at a rule.
+- `ui-check.mjs` stands up jsdom, loads `App` through Vite SSR so JSX compiles,
+  and drives it the way a player would — 310 assertions, no browser. It imports
+  `GAP`, `BOARD_CHROME`, and `CELL` from `Board.jsx` so it asserts the same
+  sizing arithmetic the CSS encodes rather than a hand-copied version.
+
+`npm test` runs both, UI first.
 
 ## The model
 
@@ -206,6 +221,20 @@ Presets, as rows × cols and mines:
 | `F`                                            | Flag the focused cell                             |
 | `C`                                            | Chord the focused cell                            |
 | `R`                                            | Reset                                             |
+| `Tab`                                          | Enter the board once, then leave it               |
+| Arrow keys                                     | Move the cursor around the board                  |
+| `Home` / `End`                                 | Jump to the ends of the current row               |
+| `Ctrl` + `Home` / `End`                        | Jump to the first / last cell of the board        |
+| `PageUp` / `PageDown`                          | Move four rows                                    |
+| `Enter` / `Space`                              | Reveal or chord the focused cell                  |
+
+**Keyboard.** The board is a real ARIA grid and it is **one tab stop**, not one
+per cell — otherwise Tab would walk 81 buttons on Beginner and 480 on Expert.
+Tab moves into the grid, the arrow keys move around inside it, and the next Tab
+leaves. Whichever cell you last had focus in is the one Tab returns to, whether
+you got there by clicking or by arrowing. The cursor stops at the edges rather
+than wrapping, and the navigation keys are consumed so the page never scrolls
+out from under you.
 
 `R` stands down while either popover is open, and while focus is in a
 board-size field, so it can't wipe a game you're in the middle of typing into or
@@ -334,8 +363,18 @@ function components, 4-space indent. Styling is MUI `sx` against tokens from
 
 ## To-do
 
-- [ ] Persist best times per difficulty
-- [ ] Keyboard navigation and focus management across the board
-- [ ] `node:test` unit tests for the model: `placeMines` determinism and exact
+- [x] Persist best times per difficulty
+- [x] Keyboard navigation and focus management across the board
+- [x] `node:test` unit tests for the model: `placeMines` determinism and exact
       mine count, `countNeighborMines` correctness, flood fill boundaries, win
       detection
+
+Nothing is currently open. Two things were deliberately not started, and are
+here so they don't get mistaken for oversights:
+
+- **No server-side scores.** Best times live in one browser. Sharing a _score_
+  (as opposed to sharing a _board_, which the seed already does) needs a backend.
+- **The reveal cascade no longer ripples.** It used to animate with a scale,
+  which moved the cell's hit box and cost the board every click a fast player
+  made. `transition-delay` keyed on distance from the clicked cell would bring
+  the read back safely, and is the route to take if it is wanted.

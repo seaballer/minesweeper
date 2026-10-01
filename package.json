@@ -7,7 +7,8 @@
         "dev": "vite",
         "build": "vite build",
         "preview": "vite preview",
-        "test": "node ui-check.mjs",
+        "test": "node ui-check.mjs && node --test test/",
+        "test:model": "node --test test/",
         "lint": "eslint .",
         "format": "prettier --write .",
         "format:check": "prettier --check ."
