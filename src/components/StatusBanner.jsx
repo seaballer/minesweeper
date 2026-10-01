@@ -3,8 +3,8 @@ import Box from '@mui/material/Box';
 // Just the outcome. The board itself already shows what happened, and the
 // banner only has to say which of the two it was.
 const MESSAGES = {
-    win: 'Field clear',
-    gameover: 'Detonated',
+    win: 'Completed',
+    gameover: 'Try Again',
 };
 
 /**
@@ -27,6 +27,12 @@ export default function StatusBanner({ status }) {
                 display: 'flex',
                 alignItems: 'center',
                 px: 1.5,
+                // Sized to its words and centered. A `Stack` stretches its
+                // children, so without these the result drew a bordered bar
+                // right across the viewport for a single short word.
+                width: 'fit-content',
+                maxWidth: '100%',
+                alignSelf: 'center',
                 borderRadius: 1.5,
                 border: '1px solid',
                 // Reserve the space so the board doesn't jump when the result

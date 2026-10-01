@@ -184,13 +184,14 @@ export default function CustomSettings({ value, onApply }) {
                 alignItems: 'flex-end',
                 gap: 1.5,
                 flexWrap: 'wrap',
-                // Sized to its contents rather than stretched across the page.
-                // A `Stack` stretches its children, so without this the panel
-                // ran the full width of the viewport and the controls floated
-                // apart at opposite ends. Capped at the parent so it wraps
-                // instead of pushing the page sideways.
+                // Sized to its contents and centered, rather than stretched
+                // across the page. A `Stack` stretches its children, so without
+                // these the panel ran the full width of the viewport and the
+                // controls floated apart at opposite ends. Capped at the parent
+                // so it wraps instead of pushing the page sideways.
                 width: 'fit-content',
                 maxWidth: '100%',
+                alignSelf: 'center',
                 p: 1.5,
                 borderRadius: 1.5,
                 backgroundColor: 'rgba(255,255,255,0.03)',
@@ -250,13 +251,6 @@ export default function CustomSettings({ value, onApply }) {
             >
                 Apply
             </Button>
-
-            {/* Only the resolved size, which is the one thing the fields above
-                cannot show: they clamp, so what you typed is not always what you
-                will get. */}
-            <Typography variant="caption" color="text.secondary" sx={{ pb: 0.5 }}>
-                {preview.rows}×{preview.cols} · {preview.mineCount} mines
-            </Typography>
         </Box>
     );
 }

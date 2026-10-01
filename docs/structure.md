@@ -330,26 +330,20 @@ another. `AGENTS.md` has the full reasoning; the short version:
    so `useMinesweeper` bumps `version` after every mutation. Never pass a `Cell`
    instance to a `memo`ized component — the reference never changes, so it will
    not repaint. `CellButton` takes flat primitives for this reason.
-
 2. **`Board` is `memo`ized and survives on `version` alone.** On a click, none of
    its real props change. Do not drop `version` from its props or from `App`,
    or the board goes dead while the model keeps working.
-
 3. **Cells act on `pointerdown`, not `click`.** A browser sends a click to the
    nearest common ancestor when press and release targets disagree, which is
    exactly what a fast sweep across the board produces. The guards around it
    (primary button only, touch excluded, follow-up click swallowed) are
    load-bearing and each has an assertion.
-
 4. **No `transform` on a cell, ever.** It changes the hit box, not just the
    look. Press feedback is a shadow; reveal feedback is the raised face fading.
-
 5. **Cell size is a constant 30px**, exposed as `--cell` and exported as `CELL`
    so `Board.jsx` and `ui-check.mjs` agree. It is not responsive by decision.
-
 6. **Gradients go through `backgroundImage`, never `backgroundColor`.** A
    gradient in `backgroundColor` is silently dropped and renders transparent.
-
 7. **Colours come from `theme.js`.** No hardcoded hex in a component.
 
 ## Where to start for a specific change
@@ -366,12 +360,12 @@ another. `AGENTS.md` has the full reasoning; the short version:
 | Mine counter, Reset button, timer row                | `src/components/ControlBar.jsx`                          |
 | Win / loss wording                                   | `src/components/StatusBanner.jsx`                        |
 | Controls / shortcuts reference text                  | `src/components/ControlsInfo.jsx`                        |
-| Difficulty presets, custom limits, `resolveCustom`   | `src/game/difficulties.js`                               |
+| Difficulty presets, custom limits,`resolveCustom`    | `src/game/difficulties.js`                               |
 | Board sizes, mine count, seeding                     | `src/game/difficulties.js` and `src/game/Grid.js`        |
 | Rules: placement, flood fill, chord, win, flag tally | `src/game/Grid.js`                                       |
 | Cell state flags                                     | `src/game/Cell.js`                                       |
 | What a click does end to end                         | `src/hooks/useMinesweeper.js`                            |
-| Clock behaviour or `m:ss` formatting                 | `src/hooks/useTimer.js`                                  |
+| Clock behaviour or`m:ss` formatting                  | `src/hooks/useTimer.js`                                  |
 | `R` shortcut                                         | `src/hooks/useResetShortcut.js`                          |
 | Custom-size field behaviour, seed checkbox           | `src/components/CustomSettings.jsx`                      |
 | Mine glyph artwork                                   | `src/components/MineIcon.jsx`                            |
