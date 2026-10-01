@@ -337,36 +337,37 @@ another. `AGENTS.md` has the full reasoning; the short version:
    nearest common ancestor when press and release targets disagree, which is
    exactly what a fast sweep across the board produces. The guards around it
    (primary button only, touch excluded, follow-up click swallowed) are
-   load-bearing and each has an assertion.
-4. **No `transform` on a cell, ever.** It changes the hit box, not just the
+   load-bearing and each ha
+4. brbs an assertion.
+5. **No `transform` on a cell, ever.** It changes the hit box, not just the
    look. Press feedback is a shadow; reveal feedback is the raised face fading.
-5. **Cell size is a constant 30px**, exposed as `--cell` and exported as `CELL`
+6. **Cell size is a constant 30px**, exposed as `--cell` and exported as `CELL`
    so `Board.jsx` and `ui-check.mjs` agree. It is not responsive by decision.
-6. **Gradients go through `backgroundImage`, never `backgroundColor`.** A
+7. **Gradients go through `backgroundImage`, never `backgroundColor`.** A
    gradient in `backgroundColor` is silently dropped and renders transparent.
-7. **Colours come from `theme.js`.** No hardcoded hex in a component.
+8. **Colours come from `theme.js`.** No hardcoded hex in a component.
 
 ## Where to start for a specific change
 
-| Goal                                                 | Start here                                               |
-| ---------------------------------------------------- | -------------------------------------------------------- |
-| Colours, spacing, type, board surfaces               | `src/theme.js`                                           |
-| Page background, fonts, reduced motion               | `src/index.css`                                          |
-| Layout, ordering, max width                          | `src/App.jsx`                                            |
-| Cell size, gap, bezel, grid semantics                | `src/components/Board.jsx`                               |
-| How a cell looks, digit colours, press feedback      | `src/components/CellButton.jsx`                          |
-| Mouse / touch / keyboard gestures                    | `src/components/CellButton.jsx`                          |
-| Cell aria-label text                                 | `src/components/CellButton.jsx`                          |
-| Mine counter, Reset button, timer row                | `src/components/ControlBar.jsx`                          |
-| Win / loss wording                                   | `src/components/StatusBanner.jsx`                        |
-| Controls / shortcuts reference text                  | `src/components/ControlsInfo.jsx`                        |
-| Difficulty presets, custom limits,`resolveCustom`    | `src/game/difficulties.js`                               |
-| Board sizes, mine count, seeding                     | `src/game/difficulties.js` and `src/game/Grid.js`        |
-| Rules: placement, flood fill, chord, win, flag tally | `src/game/Grid.js`                                       |
-| Cell state flags                                     | `src/game/Cell.js`                                       |
-| What a click does end to end                         | `src/hooks/useMinesweeper.js`                            |
-| Clock behaviour or`m:ss` formatting                  | `src/hooks/useTimer.js`                                  |
-| `R` shortcut                                         | `src/hooks/useResetShortcut.js`                          |
-| Custom-size field behaviour, seed checkbox           | `src/components/CustomSettings.jsx`                      |
-| Mine glyph artwork                                   | `src/components/MineIcon.jsx`                            |
+| Goal                                                 | Start here                                                     |
+| ---------------------------------------------------- | -------------------------------------------------------------- |
+| Colours, spacing, type, board surfaces               | `src/theme.js`                                               |
+| Page background, fonts, reduced motion               | `src/index.css`                                              |
+| Layout, ordering, max width                          | `src/App.jsx`                                                |
+| Cell size, gap, bezel, grid semantics                | `src/components/Board.jsx`                                   |
+| How a cell looks, digit colours, press feedback      | `src/components/CellButton.jsx`                              |
+| Mouse / touch / keyboard gestures                    | `src/components/CellButton.jsx`                              |
+| Cell aria-label text                                 | `src/components/CellButton.jsx`                              |
+| Mine counter, Reset button, timer row                | `src/components/ControlBar.jsx`                              |
+| Win / loss wording                                   | `src/components/StatusBanner.jsx`                            |
+| Controls / shortcuts reference text                  | `src/components/ControlsInfo.jsx`                            |
+| Difficulty presets, custom limits,`resolveCustom`  | `src/game/difficulties.js`                                   |
+| Board sizes, mine count, seeding                     | `src/game/difficulties.js` and `src/game/Grid.js`          |
+| Rules: placement, flood fill, chord, win, flag tally | `src/game/Grid.js`                                           |
+| Cell state flags                                     | `src/game/Cell.js`                                           |
+| What a click does end to end                         | `src/hooks/useMinesweeper.js`                                |
+| Clock behaviour or`m:ss` formatting                | `src/hooks/useTimer.js`                                      |
+| `R` shortcut                                       | `src/hooks/useResetShortcut.js`                              |
+| Custom-size field behaviour, seed checkbox           | `src/components/CustomSettings.jsx`                          |
+| Mine glyph artwork                                   | `src/components/MineIcon.jsx`                                |
 | Build / lint / format config                         | `vite.config.js`, `eslint.config.js`, `.prettierrc.json` |

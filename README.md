@@ -3,11 +3,6 @@
 A browser Minesweeper. React 19 and Material UI 9 on Vite 8; the rules live in a
 plain ES-module JavaScript model with no React or MUI imports.
 
-> **Status: playable and feature-complete for a solo game.** Presets and a custom
-> board, seeded shareable layouts, chording, flagging, a per-difficulty best-times
-> leaderboard, and full keyboard play. See
-> [To-do](#to-do) for what is left.
-
 ## Running it
 
 Needs Node 20.19+ or 22.12+ (Vite 8's floor) and npm.
@@ -17,14 +12,14 @@ npm install     # first time only
 npm run dev     # http://localhost:5173
 ```
 
-| Command                | Does                                                          |
-| ---------------------- | ------------------------------------------------------------- |
+| Command                  | Does                                                          |
+| ------------------------ | ------------------------------------------------------------- |
 | `npm run dev`          | Dev server with hot reload                                    |
-| `npm run build`        | Production bundle into`dist/`                                 |
+| `npm run build`        | Production bundle into`dist/`                               |
 | `npm run preview`      | Serve the built bundle                                        |
 | `npm test`             | Both suites: the UI in jsdom (310 assertions), then the model |
-| `npm run test:model`   | Just the model unit tests (33) — no browser, no jsdom         |
-| `npm run lint`         | ESLint,`react-hooks` rules included                           |
+| `npm run test:model`   | Just the model unit tests (33) — no browser, no jsdom        |
+| `npm run lint`         | ESLint,`react-hooks` rules included                         |
 | `npm run format`       | Prettier, writes in place                                     |
 | `npm run format:check` | Prettier, reports only                                        |
 
@@ -143,8 +138,8 @@ board alone, so a won game can't be flipped to a loss.
 Reveals a cell and floods outward through any zero-count cells. **Always returns
 a status string**, never `undefined`:
 
-| Return value | Meaning                                                          |
-| ------------ | ---------------------------------------------------------------- |
+| Return value   | Meaning                                                          |
+| -------------- | ---------------------------------------------------------------- |
 | `"ready"`    | A no-op before the first reveal, while the board is unplaced     |
 | `"playing"`  | The reveal succeeded, or the cell was already visible or flagged |
 | `"win"`      | The last safe cell was revealed                                  |
@@ -206,27 +201,27 @@ presentational and does not affect play.
 
 Presets, as rows × cols and mines:
 
-| Preset       | Size        | Mines                |
-| ------------ | ----------- | -------------------- |
-| Beginner     | 9 × 9       | 10                   |
-| Intermediate | 16 × 16     | 40                   |
-| Expert       | 16 × 30     | 99                   |
+| Preset       | Size           | Mines                  |
+| ------------ | -------------- | ---------------------- |
+| Beginner     | 9 × 9         | 10                     |
+| Intermediate | 16 × 16       | 40                     |
+| Expert       | 16 × 30       | 99                     |
 | Custom       | 2–30 × 2–30 | 1 to rows × cols − 1 |
 
-| Gesture                                        | Does                                              |
-| ---------------------------------------------- | ------------------------------------------------- |
-| Left click                                     | Reveal a cell                                     |
-| Right click                                    | Flag a cell, or remove a flag                     |
+| Gesture                                        | Does                                               |
+| ---------------------------------------------- | -------------------------------------------------- |
+| Left click                                     | Reveal a cell                                      |
+| Right click                                    | Flag a cell, or remove a flag                      |
 | Click / middle click / right click on a number | Chord — reveal its neighbors once the flags match |
-| `F`                                            | Flag the focused cell                             |
-| `C`                                            | Chord the focused cell                            |
-| `R`                                            | Reset                                             |
-| `Tab`                                          | Enter the board once, then leave it               |
-| Arrow keys                                     | Move the cursor around the board                  |
-| `Home` / `End`                                 | Jump to the ends of the current row               |
-| `Ctrl` + `Home` / `End`                        | Jump to the first / last cell of the board        |
-| `PageUp` / `PageDown`                          | Move four rows                                    |
-| `Enter` / `Space`                              | Reveal or chord the focused cell                  |
+| `F`                                          | Flag the focused cell                              |
+| `C`                                          | Chord the focused cell                             |
+| `R`                                          | Reset                                              |
+| `Tab`                                        | Enter the board once, then leave it                |
+| Arrow keys                                     | Move the cursor around the board                   |
+| `Home` / `End`                             | Jump to the ends of the current row                |
+| `Ctrl` + `Home` / `End`                  | Jump to the first / last cell of the board         |
+| `PageUp` / `PageDown`                      | Move four rows                                     |
+| `Enter` / `Space`                          | Reveal or chord the focused cell                   |
 
 **Keyboard.** The board is a real ARIA grid and it is **one tab stop**, not one
 per cell — otherwise Tab would walk 81 buttons on Beginner and 480 on Expert.
@@ -360,21 +355,3 @@ function components, 4-space indent. Styling is MUI `sx` against tokens from
 - **Long-press cancels on scroll.** The press that flags a cell is aborted as
   soon as a finger moves, so scrolling a wide board never places a stray flag
   by accident.
-
-## To-do
-
-- [x] Persist best times per difficulty
-- [x] Keyboard navigation and focus management across the board
-- [x] `node:test` unit tests for the model: `placeMines` determinism and exact
-      mine count, `countNeighborMines` correctness, flood fill boundaries, win
-      detection
-
-Nothing is currently open. Two things were deliberately not started, and are
-here so they don't get mistaken for oversights:
-
-- **No server-side scores.** Best times live in one browser. Sharing a _score_
-  (as opposed to sharing a _board_, which the seed already does) needs a backend.
-- **The reveal cascade no longer ripples.** It used to animate with a scale,
-  which moved the cell's hit box and cost the board every click a fast player
-  made. `transition-delay` keyed on distance from the clicked cell would bring
-  the read back safely, and is the route to take if it is wanted.
