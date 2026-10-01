@@ -157,7 +157,8 @@ export default function ControlsInfo({ open, onOpenChange }) {
                 <Divider sx={{ my: 1.5, borderColor: 'divider' }} />
                 <Section title="Keyboard" rows={KEYS} mono={theme.mono} />
                 <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                    Mines are placed on your first click, so it is always safe.
+                    Mines are placed on your first click, so it is always safe — unless you pinned
+                    the board with a seed.
                 </Typography>
             </Popover>
         </>

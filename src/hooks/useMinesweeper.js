@@ -28,26 +28,20 @@ export function useMinesweeper(initialDifficulty = DEFAULT_DIFFICULTY) {
     // Bumped on every new board so the timer knows to zero itself.
     const [gameId, setGameId] = useState(0);
 
+    // One shape for every size, so the presets and the custom panel can't drift
+    // apart. The presets carry no `seed`, so destructuring one yields
+    // `undefined` — which is exactly what an unpinned board wants, and the same
+    // value the old preset branch passed implicitly.
     const grid = useMemo(() => {
         const preset = DIFFICULTIES[difficultyKey];
-        if (preset.isCustom) {
-            const { rows, cols, mineCount, seed } = customSize;
-            const instance = new Grid(rows, cols, mineCount, seed);
-            instance.initialize();
-            return instance;
-        }
-        const instance = new Grid(preset.rows, preset.cols, preset.mineCount);
-        instance.initialize();
-        return instance;
+        const { rows, cols, mineCount, seed } = preset.isCustom ? customSize : preset;
+        // The constructor already leaves a complete unplayed board: cells
+        // allocated, `flagCount` and `remainingSafeCells` set, `status` 'ready'
+        // and no mines placed. Calling `initialize()` on top of that only
+        // re-allocates the cells and advances the seed — and for an unpinned
+        // preset that just throws away the number the constructor drew.
+        return new Grid(rows, cols, mineCount, seed);
     }, [difficultyKey, customSize]);
-
-    // The size actually in play. `difficulty` alone is not enough: the `custom`
-    // preset carries no dimensions, so reading rows/cols off it would render
-    // an empty caption.
-    const boardSize = useMemo(
-        () => ({ rows: grid.rows, cols: grid.cols, mineCount: grid.mineCount }),
-        [grid]
-    );
 
     const rerender = useCallback(() => setVersion((v) => v + 1), []);
 
@@ -59,11 +53,17 @@ export function useMinesweeper(initialDifficulty = DEFAULT_DIFFICULTY) {
     const timerRunning = grid.status !== 'ready' && !isOver;
     const elapsed = useTimer(timerRunning, gameId);
 
+    // No terminal-status guard here on purpose. `Grid` refuses input once the
+    // game is decided — `revealCell`, `toggleFlag` and `chord` each check and
+    // return the status unchanged — so a decided game is a property of the
+    // model, not something the view has to remember. Duplicating the check here
+    // is the version that drifts: it only holds until a fourth entry point is
+    // added and someone forgets this one.
+    //
+    // `rerender` still runs, which is harmless and keeps the callbacks uniform:
+    // an extra version bump repaints an unchanged board.
     const reveal = useCallback(
         (row, col) => {
-            if (grid.status === 'win' || grid.status === 'gameover') {
-                return;
-            }
             grid.revealCell(row, col);
             rerender();
         },
@@ -72,9 +72,6 @@ export function useMinesweeper(initialDifficulty = DEFAULT_DIFFICULTY) {
 
     const toggleFlag = useCallback(
         (row, col) => {
-            if (grid.status === 'win' || grid.status === 'gameover') {
-                return;
-            }
             grid.toggleFlag(row, col);
             rerender();
         },
@@ -83,9 +80,6 @@ export function useMinesweeper(initialDifficulty = DEFAULT_DIFFICULTY) {
 
     const chord = useCallback(
         (row, col) => {
-            if (grid.status === 'win' || grid.status === 'gameover') {
-                return;
-            }
             grid.chord(row, col);
             rerender();
         },
@@ -139,7 +133,6 @@ export function useMinesweeper(initialDifficulty = DEFAULT_DIFFICULTY) {
         // to Board purely so its `memo` has something that changes to compare.
         version,
         difficulty: DIFFICULTIES[difficultyKey],
-        boardSize,
         customSize,
         status: grid.status,
         isOver,

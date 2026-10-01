@@ -78,6 +78,16 @@ export default function CustomSettings({ value, onApply }) {
         }
     `;
 
+    // Enter applies, on every field. Shared rather than repeated per field: the
+    // numeric renderer and the seed renderer are otherwise identical on this
+    // one behaviour, and identical copies drift.
+    const submitOnEnter = (event) => {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            onApply(preview);
+        }
+    };
+
     const field = (name, label, min, max) => (
         <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             <Typography variant="caption" color="text.secondary">
@@ -130,12 +140,7 @@ export default function CustomSettings({ value, onApply }) {
                     );
                     setDraft((d) => ({ ...d, [name]: String(next) }));
                 }}
-                onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                        e.preventDefault();
-                        onApply(preview);
-                    }
-                }}
+                onKeyDown={submitOnEnter}
                 style={inputStyle}
             />
         </label>
@@ -166,12 +171,7 @@ export default function CustomSettings({ value, onApply }) {
                     const raw = e.target.value;
                     setDraft((d) => ({ ...d, seed: raw }));
                 }}
-                onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                        e.preventDefault();
-                        onApply(preview);
-                    }
-                }}
+                onKeyDown={submitOnEnter}
                 style={{ ...inputStyle, width: 132 }}
             />
         </label>

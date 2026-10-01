@@ -9,7 +9,7 @@ testable outside a browser.
 - `npm run dev` — Vite dev server on <http://localhost:5173>
 - `npm run build` — production bundle into `dist/`
 - `npm run preview` — serve the built bundle
-- `npm test` — mounts the components in jsdom and drives them (277 assertions)
+- `npm test` — mounts the components in jsdom and drives them (283 assertions)
 - `npm run lint` — ESLint (`react-hooks` rules included). Must be clean before committing.
 - `npm run format` / `npm run format:check` — Prettier. The config matches the
   existing style: 4-space indent, single quotes, 100 columns.
@@ -270,6 +270,50 @@ Why those checks exist is worth keeping in mind: the suite asserted
 **The declared size was correct and the painted size was not.** A stylesheet
 assertion can only catch that by banning the property, not by checking its value.
 
+## The silent-failure trap: a dotted string in `sx` is not a theme reference
+
+**Never write `backgroundColor: 'board.revealed'`.** Read the value off
+`useTheme()` and interpolate it: `backgroundColor: theme.board.revealed`.
+
+MUI's `sx` resolves only the shorthands it knows about — `primary.main`,
+`text.secondary`, `divider`, `error.main`, `background.paper`. Any _other_ dotted
+string is not treated as a theme path at all. It is emitted into the stylesheet
+verbatim, producing the declaration
+
+```css
+background-color: board.revealed;
+```
+
+which is not a colour, so the browser drops it without a warning. Verified in
+MUI 9.4: nesting the tokens under a known namespace (`background.board.*`) does
+**not** help; only interpolation does.
+
+This was live for the whole `board.*` token set. `board.bezel`, `board.border`,
+`board.revealed` and `board.mineTint` were all being dropped, so the board had no
+bezel, revealed cells had no wash, covered mines had no tint, and the 1px border
+fell back to `currentColor` at full brightness — a glaring white line instead of
+the intended 7% white. Every assertion in the suite passed throughout, because
+none of them looked at the emitted CSS.
+
+`npm test` now scans the component sources for `: 'board.…'` and fails on it.
+That is the only kind of check that catches this, for the same reason the gradient
+trap needed a CSS-engine probe rather than a value comparison: **the declared
+value can look completely correct while the browser renders nothing.**
+
+## Chord hover is a lighter wash, not a key gradient
+
+A hidden cell is a raised key, so hovering it lightens the key's own gradient
+(`keyHoverTop` → `keyHoverBottom`). A **revealed** cell is flat, and the only
+interactive revealed cells are the numbers you can chord. Those used to get the
+same gradient, which made a revealed number look like a hidden key again —
+exactly backwards for the one cell you are being invited to click.
+
+So the hover branches on the surface: `canReveal` gets the gradient,
+`canChord` gets `board.revealedHover`, a heavier version of the cell's own wash
+(`rgba(255,255,255,0.10)` over `rgba(255,255,255,0.035)`). No gradient, and
+plainly lighter than the uncovered cell. `canReveal` and `canChord` are mutually
+exclusive, so exactly one branch ever applies.
+
 ## The other silent-failure trap: gradients
 
 **A gradient passed to `backgroundColor` is silently dropped.** It accepts only
@@ -331,7 +375,7 @@ on press would reveal the very cell the long press exists to flag.
 
 - `.jsx` for components, `.js` for plain modules. Named exports, function components, 4-space indent.
 - Styling is MUI `sx` props against theme tokens. `src/index.css` is the only stylesheet and is limited to the page shell. Don't add component CSS.
-- Colors come from `theme.js` — `board.*`, the palette, and `theme.mono`. A hardcoded hex in a component is a regression; it drifts the moment a token changes.
+- Colors come from `theme.js` — `board.*`, the palette, and `theme.mono`. A hardcoded hex in a component is a regression; it drifts the moment a token changes. **The `board.*` tokens must be interpolated from `useTheme()`, never written as a dotted `sx` string** — see the silent-failure trap below, because the string form is dropped by the browser without complaint.
 - The board uses `role="group"`, not `role="grid"`. A real ARIA grid needs owned `row`/`gridcell` elements and 2-D arrow-key navigation, which this doesn't implement. Don't upgrade the role without also building the pattern.
 - The result banner and the mine counter are persistent live regions (`role="status"`). Keep them mounted: a live region that appears with its own content is usually silent.
 - Grid uses 4-space indent and no trailing newline on its final brace. Match surrounding style rather than reformatting files you touch.

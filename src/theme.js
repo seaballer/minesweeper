@@ -23,10 +23,19 @@ const theme = createTheme({
         // Raised (hidden) cell gradient stops.
         keyTop: '#232a33',
         keyBottom: '#1a1f26',
+        // A hidden key is a raised surface, so its hover just lightens that
+        // gradient. Only ever applied to `raised` cells.
         keyHoverTop: '#2b333d',
         keyHoverBottom: '#20262e',
         // Revealed cell wash, layered over the bezel.
         revealed: 'rgba(255,255,255,0.035)',
+        // Hover for a revealed cell. The only interactive revealed cells are
+        // the numbers you can chord, and those are flat — so they lift with a
+        // heavier version of their own wash rather than the raised-key
+        // gradient, which made a revealed number look like a hidden key all
+        // over again. Must stay clearly lighter than `revealed` to read as a
+        // hover at all.
+        revealedHover: 'rgba(255,255,255,0.10)',
         // Mine tint on a revealed cell.
         mineTint: 'rgba(255,90,82,0.14)',
         border: 'rgba(255,255,255,0.07)',

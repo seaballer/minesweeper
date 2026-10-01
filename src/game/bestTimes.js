@@ -21,8 +21,10 @@ export function isRanked(difficultyKey) {
     return RANKED_DIFFICULTIES.includes(difficultyKey);
 }
 
+// Built from the one list above rather than repeating the keys, so adding a
+// ranked difficulty cannot leave this shape behind.
 export function emptyTimes() {
-    return { beginner: [], intermediate: [], expert: [] };
+    return Object.fromEntries(RANKED_DIFFICULTIES.map((key) => [key, []]));
 }
 
 /**

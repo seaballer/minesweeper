@@ -325,15 +325,22 @@ function CellButton({
                 // NOTE: the gradient must go through `backgroundImage` —
                 // `backgroundColor` only accepts a <color> and silently drops
                 // a gradient, which leaves the cell fully transparent.
+                // NOTE: these are read off the theme object, never passed as a
+                // dotted string like 'board.revealed'. MUI only resolves the
+                // shorthands it knows about (`primary.main`, `text.secondary`,
+                // `divider`, …); any other dotted string is emitted as literal
+                // CSS — `background-color:board.revealed` — which the browser
+                // drops without a word. Interpolating the value is the only
+                // form that reaches the stylesheet. See `npm test`.
                 backgroundColor: isExploded
                     ? 'error.main'
                     : raised
                       ? 'transparent'
                       : isMine
-                        ? 'board.mineTint'
+                        ? theme.board.mineTint
                         : isWrongFlag
                           ? 'rgba(255,90,82,0.10)'
-                          : 'board.revealed',
+                          : theme.board.revealed,
                 ...(raised && {
                     backgroundImage: `linear-gradient(180deg, ${theme.board.keyTop} 0%, ${theme.board.keyBottom} 100%)`,
                 }),
@@ -346,17 +353,35 @@ function CellButton({
                       : 'none',
 
                 ...(interactive && {
-                    '&:hover': {
-                        backgroundImage: `linear-gradient(180deg, ${theme.board.keyHoverTop} 0%, ${theme.board.keyHoverBottom} 100%)`,
-                    },
-                    // Only while the cell is still hidden. The press reveals it,
-                    // so by the time the button is released this cell is flat
-                    // and numbered — a sunk shadow there would just look wrong.
-                    ...(canReveal && {
-                        // Paint-only, for the same reason as everything else
-                        // here: a held button must never change its hit box.
-                        '&:active': { boxShadow: PRESSED_SHADOW },
-                    }),
+                    // Two different hovers for two different surfaces.
+                    // `canReveal` and `canChord` are mutually exclusive, so
+                    // exactly one branch applies.
+                    ...(canReveal
+                        ? {
+                              // A hidden cell is a raised key: hovering
+                              // lightens the key's own gradient.
+                              '&:hover': {
+                                  backgroundImage: `linear-gradient(180deg, ${theme.board.keyHoverTop} 0%, ${theme.board.keyHoverBottom} 100%)`,
+                              },
+                              // Only while the cell is still hidden. The press
+                              // reveals it, so by the time the button is
+                              // released this cell is flat and numbered — a sunk
+                              // shadow there would just look wrong.
+                              // Paint-only, for the same reason as everything
+                              // else here: a held button must never change its
+                              // hit box.
+                              '&:active': { boxShadow: PRESSED_SHADOW },
+                          }
+                        : {
+                              // A revealed number is flat, not a key. Hovering it
+                              // with the raised-key gradient made it read as a
+                              // hidden cell again, which is exactly backwards for
+                              // the one cell you are being invited to click. Lift
+                              // it with a heavier version of its own wash
+                              // instead — no gradient, and plainly lighter than
+                              // the uncovered cell.
+                              '&:hover': { backgroundColor: theme.board.revealedHover },
+                          }),
                 }),
                 '&:focus-visible': {
                     outline: '2px solid',

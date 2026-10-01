@@ -1,5 +1,6 @@
 import { memo } from 'react';
 import Box from '@mui/material/Box';
+import { useTheme } from '@mui/material/styles';
 import CellButton from './CellButton.jsx';
 
 // Spacing constants, named so the sizing math stays readable and the test
@@ -29,6 +30,7 @@ export { GAP, BOARD_CHROME, PAD, BORDER, CELL };
  * Now the tick leaves the board alone and only a real move repaints it.
  */
 function Board({ grid, version: _version, onReveal, onFlag, onChord, disabled }) {
+    const theme = useTheme();
     return (
         <Box
             // `group`, not `grid`: a real ARIA grid requires owned row/gridcell
@@ -58,11 +60,16 @@ function Board({ grid, version: _version, onReveal, onFlag, onChord, disabled })
                 p: 2,
                 // Recessed bezel: the board reads as a panel sunk into the
                 // page rather than a card sitting on top of it.
-                backgroundColor: 'board.bezel',
+                //
+                // Read off the theme object, not as the dotted string
+                // 'board.bezel': MUI only resolves the shorthands it knows
+                // about, and any other dotted string lands in the stylesheet
+                // verbatim as invalid CSS that the browser silently drops.
+                backgroundColor: theme.board.bezel,
                 borderRadius: 2,
                 boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05), 0 20px 50px rgba(0,0,0,0.45)',
                 border: '1px solid',
-                borderColor: 'board.border',
+                borderColor: theme.board.border,
                 width: 'fit-content',
             }}
         >

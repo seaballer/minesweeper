@@ -260,12 +260,26 @@ check(
     await act(async () => {
         byText('Reset').click();
     });
+    // Scan the whole board, resetting whenever a press ends the game, rather than
+    // the first 20 cells. A press can detonate a mine, which disables every cell
+    // and leaves nothing able to "reveal as a number" — so a bounded scan failed
+    // on roughly 0.5% of layouts depending on the seed. Whether a double act
+    // happened is a property of the press path, not of where the mine was, so it
+    // is checked on a board that is still live.
     let numbered = null;
-    for (const c of cells().filter(isFreeHidden).slice(0, 20)) {
-        await press(c);
-        if (/adjacent mines/.test(c.getAttribute('aria-label') || '')) {
-            numbered = c;
-            break;
+    for (let attempt = 0; attempt < 10 && !numbered; attempt += 1) {
+        await act(async () => {
+            byText('Reset').click();
+        });
+        for (const c of cells().filter(isFreeHidden)) {
+            await press(c);
+            if (/adjacent mines/.test(c.getAttribute('aria-label') || '')) {
+                numbered = c;
+                break;
+            }
+            // A mine went off: every cell is disabled, so this board can no
+            // longer produce the numbered reveal being looked for.
+            if (cells().every((cell) => cell.disabled)) break;
         }
     }
     if (!numbered) {
@@ -844,6 +858,55 @@ check(
         /'&:active':\s*\{\s*boxShadow:\s*PRESSED_SHADOW/.test(cellCode)
 );
 
+// A dotted string in `sx` is NOT a theme reference. MUI resolves only the
+// shorthands it knows (`primary.main`, `text.secondary`, `divider`, …); any
+// other dotted string is emitted into the stylesheet verbatim —
+// `background-color:board.revealed` — and the browser drops it without a word.
+// Every `board.*` token was dead this way, so the bezel, the board border, the
+// revealed wash and the mine tint never rendered, and the border fell back to
+// `currentColor` at full brightness. Custom top-level theme keys have to be
+// read off `useTheme()` and interpolated instead.
+{
+    for (const [name, src] of Object.entries({
+        'CellButton.jsx': cellSrc,
+        'Board.jsx': boardSrc,
+    })) {
+        const bare = code(src).match(/:\s*'board\.[a-zA-Z]+'/g) ?? [];
+        check(
+            `${name} reads board tokens off the theme, not as a dotted string`,
+            bare.length === 0,
+            bare.join(' ')
+        );
+    }
+    check(
+        'the board bezel and border are interpolated',
+        /theme\.board\.bezel/.test(code(boardSrc)) && /theme\.board\.border/.test(code(boardSrc))
+    );
+    check(
+        'the revealed and mine surfaces are interpolated',
+        /theme\.board\.revealed\b/.test(cellCode) &&
+            /theme\.board\.mineTint/.test(cellCode) &&
+            /theme\.board\.revealedHover/.test(cellCode)
+    );
+    // The tokens themselves have to be colours, or interpolating changes nothing.
+    const tokens = theme.board;
+    check(
+        'the board tokens are usable colours',
+        ['bezel', 'border', 'revealed', 'revealedHover', 'mineTint'].every(
+            (k) => typeof tokens[k] === 'string' && /^(#|rgba?\()/.test(tokens[k])
+        ),
+        JSON.stringify(tokens)
+    );
+    // And the chord hover has to be visibly lighter than the revealed cell it
+    // sits on, or it does not read as a hover at all.
+    const alphaOf = (css) => Number(/rgba\([^)]*?,\s*([\d.]+)\s*\)/.exec(css)?.[1] ?? 1);
+    check(
+        'the revealed hover is lighter than the revealed cell',
+        alphaOf(tokens.revealedHover) > alphaOf(tokens.revealed),
+        `${tokens.revealed} -> ${tokens.revealedHover}`
+    );
+}
+
 // Chording: a revealed number with matching flags must open its neighbors.
 await act(async () => {
     byText('Reset').click();
@@ -1361,10 +1424,34 @@ check(
         });
         await act(async () => {});
     };
+    // Dismiss the way a user does: Escape reaches MUI's Popover via its own key
+    // handler, whereas a bare `document.body.click()` does not — a click on the
+    // body is not a click on the backdrop element, so the popover stayed open.
+    //
+    // That left `open` true in App, and because the trophy button is a TOGGLE,
+    // the next `openPopover()` clicked straight back to closing it. So the popover
+    // that then got inspected was absent, and two checks failed depending on the
+    // seed the clock handed out. This is a harness bug, not an app bug: the same
+    // sequence works by hand.
     const closePopover = async () => {
+        // Click the backdrop MUI actually rendered. `document.body.click()` does
+        // not reach it — the body is the backdrop's ANCESTOR, so a click there
+        // never targets the element — and Escape does not dismiss it here
+        // because focus sits on the trophy button rather than inside the
+        // dialog, so MUI's key handler never sees it.
+        //
+        // Either failure leaves `open` true in App, and since the trophy is a
+        // toggle the next openPopover() clicks it straight back shut. That left
+        // the popover absent for the two checks after it, which is why this was
+        // flaky rather than reliably broken.
         await act(async () => {
-            document.body.click();
+            const backdrop = document.querySelector('.MuiBackdrop-root');
+            if (!backdrop) throw new Error('no backdrop: popover never opened');
+            backdrop.dispatchEvent(
+                new dom.window.MouseEvent('click', { bubbles: true, cancelable: true })
+            );
         });
+        await act(async () => {});
     };
 
     globalThis.localStorage.removeItem('minesweeper.best-times.v1');
@@ -1432,33 +1519,80 @@ check(
             const live = cells();
             const hidden = live.filter((c) => /hidden/.test(labelOf(c)) && !c.disabled);
             if (hidden.length === 0) break;
-            // Candidates: hidden cells touching a revealed positive number. The
-            // single mine is among them; anything else is safe.
+
+            // Which hidden cell could be the single mine.
+            //
+            // It has to be adjacent to EVERY revealed positive: each of those
+            // counted it, so each one constrains it. So the candidate set is the
+            // INTERSECTION over the revealed positives, not the union.
+            //
+            // The union is what this used to compute, and it looks reasonable —
+            // "the mine touches a number, so it is a candidate" — but it is
+            // wrong in the case that matters. On a 3x3 with one mine, a corner
+            // mine sits next to two zeros and one positive, so the union marks
+            // its neighbours as candidates while the mine itself is excluded,
+            // because nothing positive touches it yet. The solver then clicked a
+            // proven-safe cell every turn, ran out, and fell through to guessing
+            // `hidden[hidden.length - 1]` — the mine, about a third of the time.
+            // That guess is what made this block flaky: it passed or failed
+            // depending on the seed the clock happened to hand out.
+            //
+            // With the intersection there is no guess at all. The mine is in the
+            // set from the first positive, everything else in `hidden` is safe
+            // to click, and the board is won without ever detonating anything.
+            // Position of a cell, from the label the board renders it with. The
+            // DOM has no row/col of its own, so this is how the test reads the
+            // grid — the same way it has always read it.
+            const posOf = (c) => {
+                const m = /^Row (\d+) column (\d+)/.exec(labelOf(c));
+                return m ? { r: Number(m[1]) - 1, c: Number(m[2]) - 1 } : null;
+            };
+            const touches = (a, b) => Math.abs(a.r - b.r) <= 1 && Math.abs(a.c - b.c) <= 1;
+
+            // Which hidden cell could be the single mine: the INTERSECTION over
+            // revealed positives, because every positive counted the mine and so
+            // every one of them constrains it.
+            //
+            // The union is what this used to compute, and "the mine touches a
+            // number, so it is a candidate" reads as reasonable — but it is
+            // wrong in the case that matters. On a 3x3 with one mine, a corner
+            // mine sits beside two zeros and one positive: the union marks its
+            // neighbours as candidates and excludes the mine itself, since
+            // nothing positive touches it yet. The solver then clicked a
+            // proven-safe cell every turn, ran out of them, and fell through to
+            // guessing `hidden[hidden.length - 1]` — the mine, about a third of
+            // the time. That guess is why this block was flaky: it passed or
+            // failed depending on the seed the clock handed out.
+            //
+            // A zero is not used to narrow: flood fill reveals all eight of its
+            // neighbours, so it never has a hidden one.
             const candidates = new Set(
                 hidden
-                    .filter((c) => {
-                        const [, rowText, colText] = /^Row (\d+) column (\d+)/.exec(labelOf(c));
-                        const r = Number(rowText) - 1;
-                        const col = Number(colText) - 1;
-                        for (let dr = -1; dr <= 1; dr += 1) {
-                            for (let dc = -1; dc <= 1; dc += 1) {
-                                if (dr === 0 && dc === 0) continue;
-                                const n = live[(r + dr) * 3 + (col + dc)];
-                                if (!n) continue;
-                                const m = /(\d+) adjacent mines/.exec(labelOf(n));
-                                if (m && Number(m[1]) > 0) return true;
-                            }
-                        }
-                        return false;
-                    })
-                    .map((c) => c.getAttribute('aria-label'))
+                    .map(posOf)
+                    .filter(Boolean)
+                    .map(({ r, c }) => `${r}-${c}`)
             );
-            // With one mine there is exactly one candidate once they narrow.
-            // Click the first cell that is not a candidate; if every remaining
-            // cell is a candidate, the mine is among them and the safe ones are
-            // the cells already known safe to touch later.
-            const safe = hidden.find((c) => !candidates.has(c.getAttribute('aria-label')));
-            await clickCell(safe ?? hidden[hidden.length - 1]);
+            for (const cell of live) {
+                const label = labelOf(cell);
+                if (/hidden/.test(label)) continue;
+                const count = /(\d+) adjacent mines/.exec(label);
+                if (!count || Number(count[1]) === 0) continue;
+                const pos = posOf(cell);
+                if (!pos) continue;
+                for (const key of [...candidates]) {
+                    const [r, c] = key.split('-').map(Number);
+                    if (!touches({ r, c }, pos)) candidates.delete(key);
+                }
+            }
+
+            // Anything outside the intersection is provably safe. With one mine
+            // the intersection never covers every hidden cell, so there is
+            // always one to click — the win takes no guesses at all.
+            const safe = hidden.find((c) => {
+                const pos = posOf(c);
+                return pos && !candidates.has(`${pos.r}-${pos.c}`);
+            });
+            await clickCell(safe ?? hidden[0]);
         }
 
         check('the shrunken board was won', won(), $('[role="status"][aria-live]')?.textContent);
