@@ -310,6 +310,9 @@ function components, 4-space indent. Styling is MUI `sx` against tokens from
 - **The wordmark is a flat colour.** `background-clip: text` rendered
   incorrectly at some browser zoom levels, so the gradient is commented out in
   `src/App.jsx` until there's a better treatment.
+- **The page background is a flat colour.** The layered radial glows and grain
+  texture it used to carry are gone, along with the `background-blend-mode` that
+  composited them. Any replacement should be a single layer.
 - **Long-press cancels on scroll.** The press that flags a cell is aborted as
   soon as a finger moves, so scrolling a wide board never places a stray flag
   by accident.

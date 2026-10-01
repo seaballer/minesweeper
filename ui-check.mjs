@@ -1395,12 +1395,6 @@ check(
         byText('Apply').click();
     });
     check('a 6x7/5 custom board applied', counter() === '005', `got "${counter()}"`);
-    const caption = () => document.body.textContent.match(/·[^·]*$/)?.[0]?.trim() ?? '(none)';
-    check(
-        'the applied seed reads back as text',
-        /seed "hello world" \(pinned\)/.test(document.body.textContent),
-        caption()
-    );
 
     // Mines only appear in the labels once the board is finished, so play each
     // board out before reading the layout off it.
@@ -1460,7 +1454,9 @@ check(
         `field="${$('input[type="text"]')?.value}" checked=${$('input[type="checkbox"]')?.checked}`
     );
 
-    // Unchecking has to unpin, or the box would be decoration.
+    // Unchecking has to unpin, or the box would be decoration. Asserted on
+    // behaviour rather than on caption text: the panel no longer spells the
+    // seed out, so the only honest proof is that the board stops replaying.
     await act(async () => {
         $('input[type="checkbox"]').click();
     });
@@ -1468,11 +1464,14 @@ check(
     await act(async () => {
         byText('Apply').click();
     });
+    const unpinnedA = await playOut();
+    const unpinnedB = await playOut();
     check(
         'unchecking Seed? unpins the board',
-        /· random/.test(document.body.textContent),
-        caption()
+        unpinnedA !== unpinnedB,
+        `two resets gave ${unpinnedA === unpinnedB ? 'the same' : 'different'} layouts`
     );
+    check('the unpinned board is no longer the seeded one', unpinnedA !== seeded);
 
     await act(async () => {
         byText('Beginner').click();

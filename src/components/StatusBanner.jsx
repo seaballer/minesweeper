@@ -1,8 +1,10 @@
 import Box from '@mui/material/Box';
 
+// Just the outcome. The board itself already shows what happened, and the
+// banner only has to say which of the two it was.
 const MESSAGES = {
-    win: 'Field clear. Every safe square found.',
-    gameover: 'Detonated. Reset and try again.',
+    win: 'Field clear',
+    gameover: 'Detonated',
 };
 
 /**

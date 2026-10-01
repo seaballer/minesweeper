@@ -141,8 +141,6 @@ export default function CustomSettings({ value, onApply }) {
         </label>
     );
 
-    const adjusted = preview.mineCount !== Number(draft.mineCount);
-
     // The mine field's ceiling depends on the current rows/cols, so it has to
     // be computed here rather than read from CUSTOM_LIMITS. A board always
     // needs one safe cell, or the first click can never be safe.
@@ -186,6 +184,13 @@ export default function CustomSettings({ value, onApply }) {
                 alignItems: 'flex-end',
                 gap: 1.5,
                 flexWrap: 'wrap',
+                // Sized to its contents rather than stretched across the page.
+                // A `Stack` stretches its children, so without this the panel
+                // ran the full width of the viewport and the controls floated
+                // apart at opposite ends. Capped at the parent so it wraps
+                // instead of pushing the page sideways.
+                width: 'fit-content',
+                maxWidth: '100%',
                 p: 1.5,
                 borderRadius: 1.5,
                 backgroundColor: 'rgba(255,255,255,0.03)',
@@ -246,10 +251,11 @@ export default function CustomSettings({ value, onApply }) {
                 Apply
             </Button>
 
-            <Typography variant="caption" color="text.secondary" sx={{ ml: 'auto', pb: 0.5 }}>
+            {/* Only the resolved size, which is the one thing the fields above
+                cannot show: they clamp, so what you typed is not always what you
+                will get. */}
+            <Typography variant="caption" color="text.secondary" sx={{ pb: 0.5 }}>
                 {preview.rows}×{preview.cols} · {preview.mineCount} mines
-                {adjusted && ' (adjusted)'}
-                {preview.seed === undefined ? ' · random' : ` · seed "${preview.seed}" (pinned)`}
             </Typography>
         </Box>
     );

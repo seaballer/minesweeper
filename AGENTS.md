@@ -300,6 +300,14 @@ accent, amber/red reserved for mines and loss. Hidden cells are raised keys
 `background-attachment: fixed` or fixed overlays — they repaint on every scroll
 frame on mobile.
 
+**The page background is a flat colour and should stay that way until someone
+deliberately redesigns it.** It used to layer two radial glows plus a tiled grain
+texture composited with `background-blend-mode`, which is what made it look muddy
+and cost a full-viewport repaint per scroll frame. If a background treatment
+comes back, make it one layer. Panels size to their contents with
+`width: 'fit-content'` rather than stretching — a `Stack` stretches its children,
+so a bar that looks like it "pans the whole screen" usually just needs that.
+
 **Input responsiveness outranks visual flair.** If an effect ever competes with
 a click being registered, the effect loses. That is not a hypothetical: an
 animated press feedback cost this board every click a fast player made. The
