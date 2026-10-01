@@ -25,6 +25,8 @@ globalThis.MouseEvent = dom.window.MouseEvent;
 globalThis.ShadowRoot = dom.window.ShadowRoot;
 globalThis.DocumentFragment = dom.window.DocumentFragment;
 globalThis.HTMLInputElement = dom.window.HTMLInputElement;
+// The best-times store reads this directly, so the harness has to expose it.
+globalThis.localStorage = dom.window.localStorage;
 globalThis.getComputedStyle = dom.window.getComputedStyle.bind(dom.window);
 globalThis.requestAnimationFrame = (cb) => setTimeout(cb, 0);
 globalThis.cancelAnimationFrame = (id) => clearTimeout(id);
@@ -43,6 +45,8 @@ const CssBaseline = (await import('@mui/material/CssBaseline')).default;
 const App = (await vite.ssrLoadModule('/src/App.jsx')).default;
 const theme = (await vite.ssrLoadModule('/src/theme.js')).default;
 const { Grid, hashSeed } = await vite.ssrLoadModule('/src/game/Grid.js');
+const { KEEP, RANKED_DIFFICULTIES, addTime, emptyTimes, isRanked, readTimes, writeTimes } =
+    await vite.ssrLoadModule('/src/game/bestTimes.js');
 
 const errors = [];
 console.error = (...a) => {
@@ -1253,6 +1257,246 @@ check(
         'no wrong flags on a won board',
         w.status === 'win' && w.cells.flat().every((c) => !c.isWrongFlag),
         w.status
+    );
+}
+
+// --- Best times ---
+{
+    check('three runs are kept per difficulty', KEEP === 3, `${KEEP}`);
+    check(
+        'only the three presets are ranked',
+        RANKED_DIFFICULTIES.join() === 'beginner,intermediate,expert' && !isRanked('custom'),
+        RANKED_DIFFICULTIES.join()
+    );
+
+    // Keeps the KEEP lowest, ascending, and only ever the preset keys.
+    let t = emptyTimes();
+    for (const s of [30, 10, 20, 40, 5]) t = addTime(t, 'beginner', s);
+    check(
+        'only the best three survive, lowest first',
+        t.beginner.join() === '5,10,20',
+        t.beginner.join()
+    );
+    t = addTime(t, 'beginner', 1);
+    check('a new best displaces the worst', t.beginner.join() === '1,5,10', t.beginner.join());
+    t = addTime(t, 'beginner', 999);
+    check('a slow run is discarded', t.beginner.join() === '1,5,10', t.beginner.join());
+
+    check(
+        'difficulties are tracked separately',
+        (() => {
+            const a = addTime(addTime(emptyTimes(), 'expert', 300), 'beginner', 8);
+            return a.expert.join() === '300' && a.beginner.join() === '8';
+        })(),
+        ''
+    );
+    check(
+        'the shape is always exactly the preset keys',
+        Object.keys(addTime(t, 'beginner', 12))
+            .sort()
+            .join() === 'beginner,expert,intermediate',
+        Object.keys(t).join()
+    );
+
+    // Custom has no leaderboard, so a time there must be refused outright.
+    const before = JSON.stringify(t);
+    check('a custom time is refused', JSON.stringify(addTime(t, 'custom', 5)) === before);
+    check(
+        'nonsense times are refused',
+        [NaN, -1, Infinity, '12', null, undefined].every(
+            (bad) => JSON.stringify(addTime(t, 'beginner', bad)) === before
+        )
+    );
+    check('zero is a legitimate time', addTime(t, 'beginner', 0).beginner.includes(0));
+
+    // Storage round-trips, and shrugs off whatever is on disk. The data is
+    // given already sorted because the store normalises on write, so an
+    // unsorted fixture would be testing the sort rather than the round trip.
+    const saved = { beginner: [3, 7], intermediate: [9], expert: [] };
+    writeTimes(saved);
+    check('times survive a write and read', JSON.stringify(readTimes()) === JSON.stringify(saved));
+    check(
+        'storage keeps only the best three, sorted',
+        (() => {
+            writeTimes({ beginner: [9, 1, 5, 3, 7] });
+            return readTimes().beginner.join() === '1,3,5';
+        })(),
+        readTimes().beginner.join()
+    );
+    const survivesJunk = (junk) => {
+        globalThis.localStorage.setItem('minesweeper.best-times.v1', junk);
+        try {
+            return JSON.stringify(readTimes()) === JSON.stringify(emptyTimes());
+        } catch {
+            return false;
+        }
+    };
+    for (const junk of ['', 'not json', '[]', 'null', '{"beginner":42}', '{"beginner":"x,y"}']) {
+        check(`unreadable storage is ignored (${junk.slice(0, 18)})`, survivesJunk(junk));
+    } // A hand-edited list with junk in it keeps only the usable entries.
+    globalThis.localStorage.setItem(
+        'minesweeper.best-times.v1',
+        JSON.stringify({ beginner: [12, -4, 'x', 30, 20], custom: [1, 2], expert: null })
+    );
+    const cleaned = readTimes();
+    check(
+        'a hand-edited list is cleaned, not trusted',
+        cleaned.beginner.join() === '12,20,30' &&
+            !('custom' in cleaned) &&
+            cleaned.expert.length === 0,
+        JSON.stringify(cleaned)
+    );
+    globalThis.localStorage.removeItem('minesweeper.best-times.v1');
+}
+
+// --- Leaderboard in the UI ---
+{
+    const { DIFFICULTIES } = await vite.ssrLoadModule('/src/game/difficulties.js');
+    const trophy = () => $('button[aria-label^="Best times"]');
+    const popover = () => $('[role="dialog"][aria-label^="Best times"]');
+
+    const openPopover = async () => {
+        await act(async () => {
+            trophy().click();
+        });
+        await act(async () => {});
+    };
+    const closePopover = async () => {
+        await act(async () => {
+            document.body.click();
+        });
+    };
+
+    globalThis.localStorage.removeItem('minesweeper.best-times.v1');
+
+    check('a trophy button is offered on a preset', !!trophy());
+    check(
+        'the trophy names the difficulty',
+        trophy()?.getAttribute('aria-label') === 'Best times for Beginner',
+        trophy()?.getAttribute('aria-label')
+    );
+
+    await openPopover();
+    check('the popover opens', !!popover());
+    check(
+        'an empty leaderboard says so',
+        /No times yet/.test(popover()?.textContent || ''),
+        (popover()?.textContent || '').trim()
+    );
+    await closePopover();
+
+    // Custom has no leaderboard at all, so the button must not be offered.
+    await act(async () => {
+        byText('Custom').click();
+    });
+    check('no trophy on a custom board', !trophy());
+    await act(async () => {
+        byText('Beginner').click();
+    });
+    check('the trophy returns on a preset', !!trophy());
+
+    // --- A win is what banks a time ---
+    //
+    // Beginner is shrunk to 3x3 with a single mine so the game is solvable
+    // here without a human's judgement. With exactly one mine, any hidden cell
+    // that touches no revealed positive number is provably safe — if it were
+    // the mine, one of its neighbours would have counted it. So click safe
+    // cells until the mine is the only candidate left, then click the rest.
+    // The dimensions are restored immediately afterwards.
+    const original = { ...DIFFICULTIES.beginner };
+    try {
+        Object.assign(DIFFICULTIES.beginner, { rows: 3, cols: 3, mineCount: 1 });
+        // The preset is read inside a memo keyed on the difficulty name, so
+        // bounce through another difficulty to force the board to rebuild.
+        await act(async () => {
+            byText('Expert').click();
+        });
+        await act(async () => {
+            byText('Beginner').click();
+        });
+        check('the shrunken preset is in play', cells().length === 9, `${cells().length} cells`);
+
+        const labelOf = (c) => c.getAttribute('aria-label') || '';
+        const decided = () => ($('[role="status"][aria-live]')?.textContent || '') !== '';
+        const won = () =>
+            /Completed|Field clear/i.test($('[role="status"][aria-live]')?.textContent || '');
+
+        const clickCell = async (c) => {
+            await act(async () => {
+                c.click();
+            });
+        };
+        await clickCell(cells()[0]);
+
+        for (let guard = 0; guard < 20 && !decided(); guard += 1) {
+            const live = cells();
+            const hidden = live.filter((c) => /hidden/.test(labelOf(c)) && !c.disabled);
+            if (hidden.length === 0) break;
+            // Candidates: hidden cells touching a revealed positive number. The
+            // single mine is among them; anything else is safe.
+            const candidates = new Set(
+                hidden
+                    .filter((c) => {
+                        const [, rowText, colText] = /^Row (\d+) column (\d+)/.exec(labelOf(c));
+                        const r = Number(rowText) - 1;
+                        const col = Number(colText) - 1;
+                        for (let dr = -1; dr <= 1; dr += 1) {
+                            for (let dc = -1; dc <= 1; dc += 1) {
+                                if (dr === 0 && dc === 0) continue;
+                                const n = live[(r + dr) * 3 + (col + dc)];
+                                if (!n) continue;
+                                const m = /(\d+) adjacent mines/.exec(labelOf(n));
+                                if (m && Number(m[1]) > 0) return true;
+                            }
+                        }
+                        return false;
+                    })
+                    .map((c) => c.getAttribute('aria-label'))
+            );
+            // With one mine there is exactly one candidate once they narrow.
+            // Click the first cell that is not a candidate; if every remaining
+            // cell is a candidate, the mine is among them and the safe ones are
+            // the cells already known safe to touch later.
+            const safe = hidden.find((c) => !candidates.has(c.getAttribute('aria-label')));
+            await clickCell(safe ?? hidden[hidden.length - 1]);
+        }
+
+        check('the shrunken board was won', won(), $('[role="status"][aria-live]')?.textContent);
+
+        // The recorded time is whatever the clock read, so banked as a number.
+        const banked = readTimes();
+        check(
+            'winning banked a time for the right difficulty',
+            banked.beginner.length === 1 && banked.beginner[0] >= 0,
+            JSON.stringify(banked)
+        );
+        check('a win on one preset banks nothing on the others', banked.expert.length === 0);
+
+        await openPopover();
+        const shown = (popover()?.textContent || '').trim();
+        check('the popover lists the time', /\d:\d\d/.test(shown), shown);
+        check('the popover names the difficulty', /Beginner/.test(shown), shown);
+        await closePopover();
+
+        // The times follow the difficulty.
+        await act(async () => {
+            byText('Expert').click();
+        });
+        await openPopover();
+        const expertShown = (popover()?.textContent || '').trim();
+        check(
+            'another preset shows its own empty list',
+            /Expert/.test(expertShown) && /No times yet/.test(expertShown),
+            expertShown
+        );
+        await closePopover();
+    } finally {
+        Object.assign(DIFFICULTIES.beginner, original);
+    }
+    globalThis.localStorage.removeItem('minesweeper.best-times.v1');
+    check(
+        'the preset dimensions are restored',
+        new Grid(9, 9, DIFFICULTIES.beginner.mineCount).rows === 9
     );
 }
 

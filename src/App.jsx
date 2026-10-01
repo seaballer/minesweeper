@@ -3,16 +3,19 @@ import Container from '@mui/material/Container';
 import Typography from '@mui/material/Typography';
 import Stack from '@mui/material/Stack';
 import { useTheme } from '@mui/material/styles';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Board from './components/Board.jsx';
 import ControlBar from './components/ControlBar.jsx';
 import DifficultySelect from './components/DifficultySelect.jsx';
 import ControlsInfo from './components/ControlsInfo.jsx';
+import BestTimes from './components/BestTimes.jsx';
 import StatusBanner from './components/StatusBanner.jsx';
 import CustomSettings from './components/CustomSettings.jsx';
 import { useMinesweeper } from './hooks/useMinesweeper.js';
 import { useResetShortcut } from './hooks/useResetShortcut.js';
+import { useBestTimes } from './hooks/useBestTimes.js';
 import { CUSTOM_KEY } from './game/difficulties.js';
+import { isRanked } from './game/bestTimes.js';
 
 export default function App() {
     const theme = useTheme();
@@ -35,18 +38,52 @@ export default function App() {
         applyCustomSize,
     } = useMinesweeper();
 
-    // Owned here so the R shortcut can stand down while the controls dialog is
-    // open — otherwise the dialog that documents R wipes the live game.
+    // Owned here so the R shortcut can stand down while a popover is open —
+    // otherwise the dialog that documents R wipes the live game. The best-times
+    // popover stands it down too, so reading your times cannot cost you a run.
     const [controlsOpen, setControlsOpen] = useState(false);
-    useResetShortcut(reset, controlsOpen);
+    const [bestTimesOpen, setBestTimesOpen] = useState(false);
+    useResetShortcut(reset, controlsOpen || bestTimesOpen);
+
+    const { times, record } = useBestTimes();
+    const ranked = isRanked(difficulty.key);
+
+    // Bank a win exactly once. Keyed on the transition into 'win' rather than
+    // on `status` being 'win', because a re-render while the banner is up would
+    // otherwise bank the same run over and over.
+    const previousStatus = useRef(status);
+    useEffect(() => {
+        if (previousStatus.current !== 'win' && status === 'win') {
+            record(difficulty.key, elapsed);
+        }
+        previousStatus.current = status;
+    }, [status, difficulty.key, elapsed, record]);
 
     return (
         // `xl`, not `md`: cells are a fixed 30px, so an Expert board is 1021px
         // wide. A 960px cap would scroll it horizontally, which is exactly the
         // problem the constant cell size traded away.
         <Container maxWidth="xl" sx={{ py: { xs: 3, sm: 6 } }}>
-            {/* Info lives in the corner, out of the centered column's way. */}
-            <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1 }}>
+            {/* Corners, out of the centered column's way. `space-between` keeps
+                the info button hard right whether or not the trophy is there. */}
+            <Box
+                sx={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    mb: 1,
+                }}
+            >
+                {ranked ? (
+                    <BestTimes
+                        times={times[difficulty.key]}
+                        difficultyLabel={difficulty.label}
+                        open={bestTimesOpen}
+                        onOpenChange={setBestTimesOpen}
+                    />
+                ) : (
+                    <span />
+                )}
                 <ControlsInfo open={controlsOpen} onOpenChange={setControlsOpen} />
             </Box>
 

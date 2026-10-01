@@ -20,7 +20,7 @@ npm run dev     # http://localhost:5173
 | `npm run dev`          | Dev server with hot reload                            |
 | `npm run build`        | Production bundle into`dist/`                         |
 | `npm run preview`      | Serve the built bundle                                |
-| `npm test`             | Mounts the UI in jsdom and drives it (244 assertions) |
+| `npm test`             | Mounts the UI in jsdom and drives it (277 assertions) |
 | `npm run lint`         | ESLint,`react-hooks` rules included                   |
 | `npm run format`       | Prettier, writes in place                             |
 | `npm run format:check` | Prettier, reports only                                |
@@ -52,10 +52,12 @@ src/
     Grid.js                Board state, mine placement, flood fill, win detection
     Cell.js                A single cell
     difficulties.js        Board size presets and resolveCustom()
+    bestTimes.js           Three best times per difficulty, and their storage
   hooks/
     useMinesweeper.js      Owns the Grid; the only place game state is mutated
     useTimer.js            The game clock, and formatTime
     useResetShortcut.js    Document-level R to reset
+    useBestTimes.js        Loads stored best times, and records a finished run
   components/              Presentational; no game state
     Board.jsx              Grid layout; exports CELL, GAP, BOARD_CHROME, PAD, BORDER
     CellButton.jsx         One cell
@@ -77,7 +79,7 @@ Three layers, and the boundary between them is the point:
   own.
 
 `ui-check.mjs` is the test harness. It stands up jsdom, loads `App` through Vite
-SSR so JSX compiles, and drives it with real clicks — 244 assertions, no browser.
+SSR so JSX compiles, and drives it with real clicks — 277 assertions, no browser.
 It imports `GAP`, `BOARD_CHROME`, and `CELL` from `Board.jsx` so it asserts the
 same sizing arithmetic the CSS encodes rather than a hand-copied version.
 
@@ -205,8 +207,21 @@ Presets, as rows × cols and mines:
 | `C`                                            | Chord the focused cell                            |
 | `R`                                            | Reset                                             |
 
-`R` stands down while the controls popover is open, and while focus is in a
-board-size field, so it can't wipe a game you're in the middle of typing into.
+`R` stands down while either popover is open, and while focus is in a
+board-size field, so it can't wipe a game you're in the middle of typing into or
+reading the results of.
+
+**Best times.** The trophy on the left keeps the three fastest completed runs for
+the current difficulty, and the list follows whichever preset is selected. Only
+the three presets are ranked — a custom board is whatever size and mine count you
+typed, so its best time wouldn't mean anything, and the trophy isn't offered
+there at all. Times are whole seconds, exactly as the clock read them at the win.
+
+They live in `localStorage` under `minesweeper.best-times.v1`. There's no server
+here, so there's no database to adjust: that key is the whole of it, and
+`localStorage` is preferred over a cookie because a cookie exists to talk to a
+server that doesn't exist. Blocked or unreadable storage is ignored rather than
+thrown, so the board still plays with a leaderboard that can't remember.
 
 Custom takes rows, columns, mines, and an optional seed, defaulting to
 12 × 14 / 25 with no seed. Input is clamped to 2–30 in each dimension and to at

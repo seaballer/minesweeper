@@ -9,7 +9,7 @@ testable outside a browser.
 - `npm run dev` — Vite dev server on <http://localhost:5173>
 - `npm run build` — production bundle into `dist/`
 - `npm run preview` — serve the built bundle
-- `npm test` — mounts the components in jsdom and drives them (244 assertions)
+- `npm test` — mounts the components in jsdom and drives them (277 assertions)
 - `npm run lint` — ESLint (`react-hooks` rules included). Must be clean before committing.
 - `npm run format` / `npm run format:check` — Prettier. The config matches the
   existing style: 4-space indent, single quotes, 100 columns.
@@ -31,9 +31,53 @@ testable outside a browser.
 - `src/game/Grid.js` — model: mine placement, flood fill, win detection. No DOM, no React.
 - `src/game/Cell.js` — single cell state. No DOM, no React.
 - `src/game/difficulties.js` — board size presets plus `resolveCustom()`, which sanitizes player-entered sizes. The fallback path is clamped too, not returned verbatim: a cleared Mines field would otherwise fall back to the previous board's count and produce an unwinnable board.
-- `src/components/` — presentational only. `Board`, `CellButton`, `ControlBar`, `DifficultySelect`, `ControlsInfo`, `StatusBanner`, `Timer`, `CustomSettings`, `MineIcon`. They receive data and callbacks as props and hold no game state.
+- `src/game/bestTimes.js` — the three best times per difficulty, and their storage. No DOM, no React.
+- `src/hooks/useBestTimes.js` — loads the stored times and exposes `record(difficultyKey, seconds)`. Writes to storage from an effect, not from inside the state updater, because an updater must stay pure and React may call it twice.
+- `src/components/` — presentational only. `Board`, `CellButton`, `ControlBar`, `DifficultySelect`, `ControlsInfo`, `BestTimes`, `StatusBanner`, `Timer`, `CustomSettings`, `MineIcon`. They receive data and callbacks as props and hold no game state.
 - `src/hooks/useResetShortcut.js` — document-level `R` to reset. Takes a `suspended` flag: `App` passes the controls-dialog state, because the dialog is where `R` is documented and it must not wipe a live game while it is open.
 - `CustomSettings.jsx` uses plain `<input>`s and one inline `<style>`, not MUI's `TextField`. `TextField` pulls in the FormControl/InputLabel/OutlinedInput family, which cost ~80kB for three numeric fields. Emotion can't express vendor pseudo-elements in a plain style object, hence the stylesheet tag. The `Seed?` checkbox is plain for the same reason: MUI's `Checkbox` would drag in the SwitchBase family for one control. `accentColor` themes the tick instead.
+
+## Best times
+
+Three runs per difficulty, kept in the browser. **There is no database** — this
+app has no backend, so "the database" is `localStorage` and nothing else.
+
+- **`localStorage`, not a cookie.** A cookie exists to talk to a server, and
+  there isn't one; it would also attach a small value to every request to
+  wherever this is hosted, in exchange for a 4kB cap and a per-domain cookie
+  budget. If these ever need to be server-readable, swap `readTimes` and
+  `writeTimes` and nothing else in the app changes — the key is the only thing
+  that names the medium.
+- **Both read and write swallow every error.** Blocked storage (private
+  browsing, site-data settings) throws, and a hand-edited value throws on parse.
+  A leaderboard that cannot persist degrades to one that does not remember;
+  neither should stop the game running.
+- **`sanitize` is not a formality.** Anything read off disk is rebuilt from
+  `RANKED_DIFFICULTIES`: at most `KEEP` non-negative finite numbers, ascending.
+  That makes `addTime` safe to call with whatever came back out of storage, and
+  it means a hand-edited `custom` key cannot sneak into the shape.
+- **Only the three presets are ranked** (`RANKED_DIFFICULTIES`). `App` renders
+  the trophy only when `isRanked(difficulty.key)`, so a custom board has no
+  leaderboard at all rather than an empty one — its "best time" is not
+  comparable to another custom board, let alone to a preset.
+- **A win is banked once, keyed on the transition.** `App` keeps
+  `previousStatus` in a ref and records when the status _becomes_ `win`. Testing
+  `status === 'win'` directly would bank the same run again on every re-render
+  while the banner is up.
+- **Times are whole seconds**, exactly what the clock read at the win, so the
+  board and the leaderboard cannot disagree about the same run. `0` is therefore
+  a legitimate value: it means the game was won inside the first second, which
+  the presets make hard but scripted play can do.
+- **Repeats are kept, not collapsed.** Two runs at the same whole second are two
+  real runs, and the list says `1 / 2 / 3` by position.
+- **The popover suspends `R`.** `App` passes `controlsOpen || bestTimesOpen` to
+  `useResetShortcut`, so reading your times cannot cost you the run you just
+  finished.
+
+`ui-check.mjs` wins a real Beginner game to prove the wiring, by temporarily
+shrinking that preset to 3×3 with a single mine and then solving it: with one
+mine, a hidden cell that touches no revealed positive number is provably safe.
+The preset is restored in a `finally`.
 
 ## Custom board inputs
 
