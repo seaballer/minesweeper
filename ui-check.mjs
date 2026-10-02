@@ -1291,6 +1291,35 @@ check('cell size has no clamp/min/max', !/--cell[^\n]*(clamp|min|max)\(/.test(co
 check('cells size from the shared variable', /var\(--cell\)/.test(code(cellSrc)));
 check('no hardcoded 30px cell width', !/width:\s*30\s*,/.test(cellSrc));
 
+// Every pixel of the grid has to belong to a cell. Cells sit in a 33px pitch
+// with 30px keys, so 3px of every pitch used to belong to the board rather than
+// to either neighbour — and a right-click there flagged nothing and let the
+// browser menu open, which a player aiming at a cell cannot see coming.
+//
+// The overlay is a pseudo-element, so this checks the shape rather than proving
+// the pixels: it must grow by a full `--gap`, read from the token the board
+// sets. A half-gap split reads as tidier and is wrong — at an odd gap the two
+// halves cannot meet and the middle pixel hits nothing, which is what a browser
+// probe found. Overlapping the neighbour is parity-independent and resolves by
+// paint order, so the gap lands on the cell to the right and below.
+check(
+    'cells grow their hit area across the whole gap',
+    /right:\s*`calc\(var\(--gap\)\s*\*\s*-1\)`/.test(cellSrc) &&
+        /bottom:\s*`calc\(var\(--gap\)\s*\*\s*-1\)`/.test(cellSrc),
+    (cellSrc.match(/right: `[^`]*`/g) || []).join(' | ')
+);
+check(
+    'the gap is a shared token, not a literal in two places',
+    /'--gap':\s*`\$\{GAP\}px`/.test(boardSrc) && !/gap:\s*3\b/.test(cellSrc)
+);
+// The overlay is what extends the hit area, so it must not be something that
+// moves the element the browser hit-tests against — the same hazard `transform`
+// carries, and the reason this is a pseudo-element rather than a negative margin.
+check(
+    'the hit-area overlay paints nothing and moves nothing',
+    /'&::after'/.test(cellSrc) && !/margin:\s*['"`]?-/.test(cellSrc)
+);
+
 // A `transform` does not merely look different on a cell — it changes what the
 // browser hit-tests against, because a transformed element is hit on its
 // transformed geometry. A browser dispatches `click` to the nearest common

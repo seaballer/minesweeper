@@ -272,6 +272,10 @@ function Board({ grid, version: _version, boardId, onReveal, onFlag, onChord, di
                 // The wrapper scrolls if a board ever exceeds the available
                 // width (phones), rather than shrinking cells below tappable.
                 '--cell': `${CELL}px`,
+                // The gap is a token rather than a literal in two places: the
+                // grid uses it for spacing, and each cell uses it to grow its
+                // own hit area across the gap. See CellButton's `--gap` note.
+                '--gap': `${GAP}px`,
                 gridTemplateColumns: `repeat(${grid.cols}, var(--cell))`,
                 gap: `${GAP}px`,
                 p: 2,
@@ -289,6 +293,15 @@ function Board({ grid, version: _version, boardId, onReveal, onFlag, onChord, di
                 borderColor: theme.board.border,
                 width: 'fit-content',
             }}
+            // Right-click anywhere on the board is a Minesweeper gesture, so the
+            // browser's own menu must never appear over it. A click in the gap
+            // between two cells used to land here, flag nothing, and pop the menu
+            // open — see the note on the cells' hit area in CellButton.
+            //
+            // A prop rather than an `sx` key, because `sx` is a style object and
+            // a function in one is read as a style interpolator and called with
+            // the theme, not with an event.
+            onContextMenu={(event) => event.preventDefault()}
         >
             {grid.cells.map((row, rowIndex) => (
                 // `display: contents` so the row owns the semantics without

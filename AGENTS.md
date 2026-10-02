@@ -9,7 +9,7 @@ testable outside a browser.
 - `npm run dev` — Vite dev server on <http://localhost:5173>
 - `npm run build` — production bundle into `dist/`
 - `npm run preview` — serve the built bundle
-- `npm test` — both suites: the jsdom UI harness (338 assertions) and the model unit tests
+- `npm test` — both suites: the jsdom UI harness (341 assertions) and the model unit tests
 - `npm run test:model` — just `node --test test/`, the model suite on its own (33 tests)
 - `npm run lint` — ESLint (`react-hooks` rules included). Must be clean before committing.
 - `npm run format` / `npm run format:check` — Prettier. The config matches the
@@ -451,6 +451,45 @@ none of them looked at the emitted CSS.
 That is the only kind of check that catches this, for the same reason the gradient
 trap needed a CSS-engine probe rather than a value comparison: **the declared
 value can look completely correct while the browser renders nothing.**
+
+## Every pixel of the grid belongs to a cell
+
+Cells are 30px keys in a 33px pitch, so 3px of every pitch used to belong to
+**the board** rather than to either neighbour. A right-click in that gap flagged
+nothing and let the browser's context menu open over the game — a player aiming
+at a cell could miss by three pixels and be punished for it, with no way to see
+it coming.
+
+**The visible key and the hit area are different questions, so they are sized
+separately.** The key stays `--cell` and the board keeps its `--gap`, because
+that gap is what makes the board read as separate keys rather than one slab.
+Each cell then grows a `::after` overlay right and down by a full `--gap`, and
+the gap belongs to a cell.
+
+- **A full gap, not half.** Splitting the gap so each cell claims half reads as
+  tidier and is **wrong**: at an odd gap the two halves cannot meet. Measured in
+  a browser, the half-gap version left a full dead column of pixels down the
+  middle of every gap. Overlapping is parity-independent, and the overlap is
+  harmless because hit-testing follows paint order and a later cell always paints
+  above its earlier neighbour — so the gap resolves deterministically to the
+  cell on its right and below.
+- **A pseudo-element, not a negative margin or a transform.** Both of those move
+  the element the browser hit-tests against, which is the hazard described
+  further down. The overlay paints nothing and changes no geometry. It does need
+  `position: relative` on the cell, since the cell is its positioning context.
+- **`--gap` is a token, not a literal in two places.** The board sets it and the
+  cell reads it, so the grid spacing and the hit area cannot disagree about how
+  wide a gap is. `npm test` asserts both halves.
+- **The board suppresses the context menu itself.** Belt and braces: even with
+  every pixel owned, `onContextMenu` on the board guarantees the browser menu
+  can never appear over a Minesweeper gesture. That one is a **prop, not an `sx`
+  key** — `sx` is a style object, so a function in it is read as a style
+  interpolator and called with the theme rather than with an event.
+
+**This is not observable in jsdom**, which does no layout and no hit-testing. The
+pixel sweep — `elementFromPoint` over all 81 cells and every pixel of their
+pitches — was a browser probe, and it is the only thing that actually proves the
+claim. The committed assertions check the shape of the fix, not the pixels.
 
 ## Chord hover is a lighter wash, not a key gradient
 

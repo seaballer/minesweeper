@@ -297,6 +297,42 @@ function CellButton({
                 // lockstep with the grid columns at any board size.
                 width: 'var(--cell)',
                 height: 'var(--cell)',
+                // The visible key stays `--cell` square and the board keeps its
+                // `--gap` between keys, because that gap is what makes the
+                // board read as separate keys rather than one flat slab.
+                //
+                // The *hit* area is a different question. A right-click in the
+                // gap used to reach the board instead of a cell, which flagged
+                // nothing and let the browser menu open — so a player aiming at
+                // a cell could miss by three pixels and get punished for it.
+                //
+                // This pseudo-element is the fix: an invisible overlay that grows
+                // right and down by a full gap, so the gap belongs to a cell.
+                //
+                // It deliberately overlaps the next cell's box rather than
+                // stopping halfway. Splitting the gap into halves sounds tidier
+                // but only works for an even gap: at 3px the two 1.5px halves
+                // cannot meet, and the middle pixel hit nothing at all — measured
+                // in a browser, with a full dead column of them. Overlapping is
+                // parity-independent, and the overlap is harmless: hit-testing
+                // follows paint order, and a later cell always paints above its
+                // earlier neighbour. So the gap resolves to the cell on its right
+                // and below, deterministically, with nothing left over.
+                //
+                // Deliberately NOT a transform or a negative margin on the cell
+                // itself — either would move the element the browser hit-tests
+                // against, which is the hazard the `transform` note below
+                // describes. This paints nothing and changes no geometry.
+                '&::after': {
+                    content: '""',
+                    position: 'absolute',
+                    // The cell is the positioning context for the overlay.
+                    top: 0,
+                    left: 0,
+                    right: `calc(var(--gap) * -1)`,
+                    bottom: `calc(var(--gap) * -1)`,
+                },
+                position: 'relative',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',

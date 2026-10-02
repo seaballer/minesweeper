@@ -17,7 +17,7 @@ npm run dev     # http://localhost:5173
 | `npm run dev`          | Dev server with hot reload                                    |
 | `npm run build`        | Production bundle into`dist/`                                 |
 | `npm run preview`      | Serve the built bundle                                        |
-| `npm test`             | Both suites: the UI in jsdom (338 assertions), then the model |
+| `npm test`             | Both suites: the UI in jsdom (341 assertions), then the model |
 | `npm run test:model`   | Just the model unit tests (33) — no browser, no jsdom         |
 | `npm run lint`         | ESLint,`react-hooks` rules included                           |
 | `npm run format`       | Prettier, writes in place                                     |
@@ -87,7 +87,7 @@ Two test suites, split by what each can observe:
   flood-fill boundaries, win detection, the flag tally, chording, and the
   coordinate contracts. No mounting, so a failure points at a rule.
 - `ui-check.mjs` stands up jsdom, loads `App` through Vite SSR so JSX compiles,
-  and drives it the way a player would — 338 assertions, no browser. It imports
+  and drives it the way a player would — 341 assertions, no browser. It imports
   `GAP`, `BOARD_CHROME`, and `CELL` from `Board.jsx` so it asserts the same
   sizing arithmetic the CSS encodes rather than a hand-copied version.
 
@@ -208,21 +208,21 @@ Presets, as rows × cols and mines:
 | Expert       | 16 × 30     | 99                   |
 | Custom       | 2–30 × 2–30 | 1 to rows × cols − 1 |
 
-| Gesture                                        | Does                                              |
-| ---------------------------------------------- | ------------------------------------------------- |
-| Press and release                              | Reveal a cell                                     |
-| Press, drag across, then release               | Reveal the cell you let go over                   |
-| Right click                                    | Flag a cell, or remove a flag                     |
-| Click / middle click / right click on a number | Chord — reveal its neighbors once the flags match |
-| `F`                                            | Flag the focused cell                             |
-| `C`                                            | Chord the focused cell                            |
-| `R`                                            | Reset                                             |
-| `Tab`                                          | Enter the board once, then leave it               |
-| Arrow keys                                     | Move the cursor around the board                  |
-| `Home` / `End`                                 | Jump to the ends of the current row               |
-| `Ctrl` + `Home` / `End`                        | Jump to the first / last cell of the board        |
-| `PageUp` / `PageDown`                          | Move four rows                                    |
-| `Enter` / `Space`                              | Reveal or chord the focused cell                  |
+| Gesture                                        | Does                                                                     |
+| ---------------------------------------------- | ------------------------------------------------------------------------ |
+| Press and release                              | Reveal a cell                                                            |
+| Press, drag across, then release               | Reveal the cell you let go over                                          |
+| Right click                                    | Flag a cell, or remove a flag. Works anywhere on the cell, gaps included |
+| Click / middle click / right click on a number | Chord — reveal its neighbors once the flags match                        |
+| `F`                                            | Flag the focused cell                                                    |
+| `C`                                            | Chord the focused cell                                                   |
+| `R`                                            | Reset                                                                    |
+| `Tab`                                          | Enter the board once, then leave it                                      |
+| Arrow keys                                     | Move the cursor around the board                                         |
+| `Home` / `End`                                 | Jump to the ends of the current row                                      |
+| `Ctrl` + `Home` / `End`                        | Jump to the first / last cell of the board                               |
+| `PageUp` / `PageDown`                          | Move four rows                                                           |
+| `Enter` / `Space`                              | Reveal or chord the focused cell                                         |
 
 **Keyboard.** The board is a real ARIA grid and it is **one tab stop**, not one
 per cell — otherwise Tab would walk 81 buttons on Beginner and 480 on Expert.
