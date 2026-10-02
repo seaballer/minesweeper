@@ -9,7 +9,7 @@ testable outside a browser.
 - `npm run dev` — Vite dev server on <http://localhost:5173>
 - `npm run build` — production bundle into `dist/`
 - `npm run preview` — serve the built bundle
-- `npm test` — both suites: the jsdom UI harness (336 assertions) and the model unit tests
+- `npm test` — both suites: the jsdom UI harness (337 assertions) and the model unit tests
 - `npm run test:model` — just `node --test test/`, the model suite on its own (33 tests)
 - `npm run lint` — ESLint (`react-hooks` rules included). Must be clean before committing.
 - `npm run format` / `npm run format:check` — Prettier. The config matches the
@@ -322,6 +322,18 @@ fast-click bug and is also what makes the drag work.
   committed by the board, and the `click` the browser synthesises afterwards
   would double-act, so the cell swallows it. `touchedByFinger` distinguishes a
   tap's click, and `event.detail === 0` distinguishes a keyboard one.
+- **The held look comes from `isPressing`, never from `:active`.** `:active`
+  matches the element the press _started_ on and holds there for the whole
+  gesture, so during a drag two cells looked held at once: the one under the
+  cursor, and the one it began on, stuck. `npm test` asserts there is no
+  `&:active` in the cell at all — and note what that assertion is standing in
+  for. jsdom does no `:active` matching and does not expose Emotion's sheet, so
+  **every behavioural check in the suite passed while this was broken.** It was
+  caught by reading computed `box-shadow` in a real browser, which is the same
+  class of failure as the dotted-`sx` trap below: the declared value looks right
+  and the browser paints something else. That is the second time this suite's
+  limits have been the thing that mattered, and both times only a browser
+  settled it.
 
 **`cellGestures` is the single definition of "what does activating this cell
 do."** It lives in `src/game/Cell.js` and both `CellButton` and `Board` call it.

@@ -339,6 +339,11 @@ check(
         pressing()[0]?.getAttribute('data-cell')
     );
     check('still only one cell highlighted', pressing().length === 1);
+    // This is where the one-cell claim comes from, and note what it does NOT
+    // cover: jsdom has no `:active` matching and does not expose Emotion's
+    // sheet, so a stray `:active` rule could light a second cell for real while
+    // every assertion here still passed. A browser caught that, not this suite.
+    // The source-level guard is the `no &:active` check further down.
     check(
         'nothing is revealed while the button is still down',
         /hidden/.test(start.getAttribute('aria-label') || '') &&
@@ -1311,12 +1316,19 @@ check(
     !/transition:[^;]*\btransform\b/.test(cellCode),
     (cellCode.match(/.*transition:.*/g) || []).join(' | ')
 );
-// Removing the geometry must not remove the feedback along with it.
+// Removing the geometry must not remove the feedback along with it — but the
+// feedback has to come from the board's tracked cell, not from `:active`.
+//
+// `:active` matches the element the press *started* on and holds there for the
+// whole gesture, so a drag lit two cells at once: the one under the cursor and
+// the one it began on, stuck. The board already tracks the cell under the
+// pointer, so that prop is the only source of the held look. A `:active` rule
+// can only contradict it.
 check(
     'a held cell still gets a painted pressed state',
-    /boxShadow:\s*PRESSED_SHADOW/.test(cellCode) &&
-        /'&:active':\s*\{\s*boxShadow:\s*PRESSED_SHADOW/.test(cellCode)
+    /pressing \|\| isPressing\s*\?\s*PRESSED_SHADOW/.test(cellCode)
 );
+check('the held look comes from the tracked cell, not :active', !/&:active/.test(cellCode));
 
 // A dotted string in `sx` is NOT a theme reference. MUI resolves only the
 // shorthands it knows (`primary.main`, `text.secondary`, `divider`, …); any

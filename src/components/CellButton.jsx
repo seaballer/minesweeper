@@ -22,9 +22,14 @@ const NUMBER_COLORS = {
 // Long enough not to fire on a tap, short enough not to feel sluggish.
 const LONG_PRESS_MS = 450;
 
-// What a held cell looks like: the key sinking into its own face. This is the
-// only feedback a touch user gets that a press registered before the long-press
-// fires, and it doubles as the look of the cell a held mouse press has armed.
+// What a held cell looks like: the key sinking into its own face.
+//
+// Driven entirely by the `isPressing` prop, never by the CSS `:active` pseudo
+// class. `:active` matches the element the *press started on* and stays there
+// while the button is held, so during a drag two cells looked held at once —
+// the one under the cursor, and the one the gesture began on, stuck. The board
+// tracks the cell under the pointer, so it owns this state; `:active` would only
+// ever contradict it.
 //
 // It is a shadow, not a scale or a nudge, on purpose. See the note on
 // `transform` in the sx block — a cell that moves or resizes while pressed
@@ -359,7 +364,10 @@ function CellButton({
                 boxShadow: isExploded
                     ? 'inset 0 0 0 1px rgba(255,255,255,0.25)'
                     : raised
-                      ? pressing || isPressing
+                      ? // Two things hold a cell down: `pressing` is this cell's own
+                        // long-press timer (touch), `isPressing` is the board
+                        // saying the pointer is over it right now.
+                        pressing || isPressing
                           ? PRESSED_SHADOW
                           : 'inset 0 1px 0 rgba(255,255,255,0.07), 0 2px 0 rgba(0,0,0,0.35)'
                       : 'none',
@@ -375,14 +383,6 @@ function CellButton({
                               '&:hover': {
                                   backgroundImage: `linear-gradient(180deg, ${theme.board.keyHoverTop} 0%, ${theme.board.keyHoverBottom} 100%)`,
                               },
-                              // Only while the cell is still hidden. The press
-                              // reveals it, so by the time the button is
-                              // released this cell is flat and numbered — a sunk
-                              // shadow there would just look wrong.
-                              // Paint-only, for the same reason as everything
-                              // else here: a held button must never change its
-                              // hit box.
-                              '&:active': { boxShadow: PRESSED_SHADOW },
                           }
                         : {
                               // A revealed number is flat, not a key. Hovering it
