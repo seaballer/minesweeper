@@ -4,6 +4,7 @@ import { useTheme } from '@mui/material/styles';
 import FlagIcon from '@mui/icons-material/Flag';
 import CloseIcon from '@mui/icons-material/Close';
 import MineIcon from './MineIcon.jsx';
+import { cellGestures } from '../game/Cell.js';
 
 // Digit colors tuned for the dark field: light enough to clear AA contrast
 // against the revealed-cell backdrop without glowing.
@@ -22,8 +23,8 @@ const NUMBER_COLORS = {
 const LONG_PRESS_MS = 450;
 
 // What a held cell looks like: the key sinking into its own face. This is the
-// only feedback a touch user gets that a press registered before the
-// long-press fires, and it doubles as the mouse `:active` state.
+// only feedback a touch user gets that a press registered before the long-press
+// fires, and it doubles as the look of the cell a held mouse press has armed.
 //
 // It is a shadow, not a scale or a nudge, on purpose. See the note on
 // `transform` in the sx block — a cell that moves or resizes while pressed
@@ -52,6 +53,7 @@ function CellButton({
     disabled,
     tabIndex = 0,
     cellRef,
+    isPressing = false,
 }) {
     const theme = useTheme();
 
@@ -102,12 +104,15 @@ function CellButton({
 
     // Two independent gestures: an unrevealed cell reveals, a revealed number
     // chords. A zero cell is excluded because flood fill already covered it.
-    const canReveal = !disabled && !isVisible && !isFlagged;
-    // A hidden cell can always be flagged OR unflagged, so a misplaced flag is
-    // recoverable without reaching for Reset. The model also refuses to flag a
-    // visible cell, so this only needs to cover the hidden half.
-    const canFlag = !disabled && !isVisible;
-    const canChord = !disabled && isVisible && !isMine && neighborMines > 0;
+    // The rules live in `cellGestures` because `Board` needs the same three
+    // answers to work out what a drag-release should commit.
+    const { canReveal, canFlag, canChord } = cellGestures({
+        disabled,
+        isMine,
+        isVisible,
+        isFlagged,
+        neighborMines,
+    });
     const interactive = canReveal || canChord;
 
     // Long-press flags on touch, where there is no right click. A press that
@@ -165,51 +170,45 @@ function CellButton({
         }
     };
 
-    // Set when a press already acted, so the `click` that the browser sends
-    // afterwards does not act a second time. See onPointerDown.
-    const actedOnPress = useRef(false);
+    // A mouse press does NOT act here. `Board` owns the whole press: it arms on
+    // pointerdown, follows the pointer while the button is held, and commits on
+    // pointerup against the cell under the cursor at that moment. That is what
+    // makes a drag open the cell you *let go over* rather than the one you
+    // started on, and it is still immune to the bug that made this act on press
+    // in the first place: `pointerup` fires on whatever is under the pointer,
+    // with no requirement that press and release share a target. The synthesized
+    // `click` has exactly that requirement, which is why a fast sweep used to
+    // lose every click it made.
+    //
+    // What is left for `onClick` is everything a mouse press does not cover:
+    // touch taps, and keyboard activation.
 
-    // Act on PRESS, not on click.
-    //
-    // A browser only fires `click` when the mousedown and mouseup targets
-    // agree, and when they disagree it sends the click to their nearest common
-    // ancestor instead. Play a board the way a fast player does — sweeping the
-    // mouse across it and clicking as you go — and the pointer travels several
-    // cells between press and release. Every one of those clicks was dispatched
-    // to the board, so no cell ever heard about it. Measured on a recording of
-    // that: a median 1719 px/sec, about three cells per click, and exactly one
-    // cell revealed across six seconds of clicking — the one click where the
-    // mouse happened to be still.
-    //
-    // `pointerdown` fires on the element the press *started* on, however far the
-    // pointer travels afterwards, so the cell the user aimed at is the one that
-    // acts. It also removes the wait for release, which is what makes the board
-    // feel immediate.
+    // Set by the touch handlers so the `click` a tap synthesises afterwards can
+    // be told apart from the one a mouse press produces.
+    const touchedByFinger = useRef(false);
+
     const onPointerDown = (event) => {
-        // Touch keeps the long-press path: acting on press would reveal the very
-        // cell the long press exists to flag.
         if (event.pointerType === 'touch') {
-            return;
+            touchedByFinger.current = true;
         }
-        // Only the primary button. Right click flags and middle click chords,
-        // both of which are handled by their own handlers below — acting here
-        // too would flag a cell and then reveal or chord it.
-        if (event.button !== 0) {
-            return;
-        }
-        actedOnPress.current = true;
-        act();
     };
 
-    // Keyboard activation and script-driven clicks still arrive here, and so
-    // does every touch tap and a click the pointer wandered off of. The ref
-    // makes the press-then-click pair act exactly once.
-    const onClick = () => {
-        if (actedOnPress.current) {
-            actedOnPress.current = false;
+    const onClick = (event) => {
+        // A tap: act, unless the long press already flagged this cell. `act`
+        // consumes that marker itself.
+        if (touchedByFinger.current) {
+            touchedByFinger.current = false;
+            act();
             return;
         }
-        act();
+        // `detail` 0 means no pointer produced it: keyboard Enter or Space, or a
+        // scripted `click()`.
+        if (event.detail === 0) {
+            act();
+            return;
+        }
+        // Anything else is a real mouse click, and the board already committed
+        // it on pointerup. Swallow it, so press-then-click acts exactly once.
     };
 
     return (
@@ -227,12 +226,12 @@ function CellButton({
             // owning row expects. The button stays focusable and activatable, so
             // Enter and Space still reveal and chord.
             role={cellRef ? 'gridcell' : undefined}
+            // Marks the cell a held mouse press would open if released right
+            // now. Purely a transient visual, so it is a data attribute for the
+            // test harness rather than an ARIA state that would mean nothing to
+            // a screen reader.
+            {...(isPressing ? { 'data-pressing': 'true' } : {})}
             onPointerDown={onPointerDown}
-            onPointerLeave={() => {
-                // A press that started here but ended elsewhere gets no click at
-                // all. Drop the flag so the next press is not mistaken for one.
-                actedOnPress.current = false;
-            }}
             onClick={onClick}
             // Middle click is the conventional chord gesture.
             onAuxClick={(event) => {
@@ -360,7 +359,7 @@ function CellButton({
                 boxShadow: isExploded
                     ? 'inset 0 0 0 1px rgba(255,255,255,0.25)'
                     : raised
-                      ? pressing
+                      ? pressing || isPressing
                           ? PRESSED_SHADOW
                           : 'inset 0 1px 0 rgba(255,255,255,0.07), 0 2px 0 rgba(0,0,0,0.35)'
                       : 'none',

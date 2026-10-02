@@ -100,19 +100,24 @@ const press = async (el, { button = 0, pointerType = 'mouse' } = {}) => {
         el.dispatchEvent(ev);
     });
 };
-const pointerLeave = async (el) => {
-    const ev = new dom.window.MouseEvent('pointerleave', { bubbles: true, cancelable: true });
-    Object.defineProperty(ev, 'pointerType', { value: 'mouse' });
-    await act(async () => {
-        el.dispatchEvent(ev);
-    });
-};
 const isFreeHidden = (c) => {
     const l = c.getAttribute('aria-label') || '';
     return !c.disabled && /hidden/.test(l) && !/flagged/.test(l);
 };
 const revealedCount = () =>
     cells().filter((c) => !/hidden/.test(c.getAttribute('aria-label') || '')).length;
+// Read once, up here, because assertions in several blocks below scan the
+// component sources. Emotion writes its rules into a sheet jsdom does not
+// expose, so the source is the only place a style contract can be checked.
+const readFile = (await import('node:fs/promises')).readFile;
+const boardSrc = await readFile('src/components/Board.jsx', 'utf8');
+const cellSrc = await readFile('src/components/CellButton.jsx', 'utf8');
+const cellJsSrc = await readFile('src/game/Cell.js', 'utf8');
+// Strip comments before scanning, so prose about old approaches is not mistaken
+// for real code.
+const code = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+const cellCode = code(cellSrc);
+
 const results = [];
 const check = (n, c, e = '') => results.push(`${c ? 'PASS' : 'FAIL'} ${n}${e ? ' :: ' + e : ''}`);
 
@@ -227,94 +232,244 @@ check(
     alreadyRevealed.getAttribute('aria-label')
 );
 
-// --- Acting on press, not on click ---
+// --- The held-press gesture: arm, follow, commit on release ---
 //
-// A browser fires `click` only when the mousedown and mouseup targets agree,
-// and sends it to their common ancestor when they don't. Clicking while
-// sweeping the mouse moves the pointer several cells between press and release,
-// so those clicks never reach a cell at all. These cover the press path that
-// replaces it, and the guards that keep it from double-acting.
+// A press arms the board, the board highlights the cell under the pointer while
+// the button is held, and the release opens whichever cell the pointer is over
+// at that moment. Two earlier contracts are baked into these:
+//
+// 1. It must not act on `click`. A browser only fires `click` when the mousedown
+//    and mouseup targets agree, and sends it to their common ancestor when they
+//    don't — so a fast sweep lost every click. `pointerup` has no such rule.
+// 2. It must not act on press either, or a drag would open the cell it started
+//    on instead of the one it ended on.
 {
+    const pressing = () => $$('#minefield [data-pressing="true"]');
+    const cellByRef = (where) => $(`#minefield [data-cell="${where}"]`);
+
+    // A dense, SEEDED board, and both matter:
+    //
+    // - Dense, so a flood fill out of the release cell cannot reach the pressed
+    //   cell and make "only the release opened something" ambiguous.
+    // - Seeded, because this block compares a drag against a plain click, and on
+    //   an unseeded board those two runs get *different* mine layouts — the
+    //   first click is excluded from placement, so the comparison would be
+    //   between two unrelated boards. A pinned layout places from the seed alone.
     await act(async () => {
-        byText('Reset').click();
+        byText('Custom').click();
+    });
+    await act(async () => {
+        $('input[type="checkbox"]').click();
+    });
+    await act(async () => {
+        setNative($('input[aria-label="Rows"]'), '9');
+        setNative($('input[aria-label="Cols"]'), '9');
+        setNative($('input[aria-label="Mines"]'), '60');
+        setNative($('input[aria-label="Seed"]'), 'drag test');
+    });
+    await act(async () => {
+        byText('Apply').click();
     });
 
-    // The headline case: a press with no release must reveal.
-    const a = cells().find(isFreeHidden);
-    const before = revealedCount();
-    await press(a);
-    check(
-        'a press alone reveals the cell (no release needed)',
-        !/hidden/.test(a.getAttribute('aria-label') || ''),
-        a.getAttribute('aria-label')
-    );
-    check(
-        'the press advanced the board',
-        revealedCount() > before,
-        `${before} -> ${revealedCount()}`
-    );
-
-    // The release that follows a press must not act a second time. On a cell
-    // that revealed as a number, a second act would chord and open its
-    // neighbours, which is an observable difference rather than a subtle one.
-    await act(async () => {
-        byText('Reset').click();
-    });
-    // Scan the whole board, resetting whenever a press ends the game, rather than
-    // the first 20 cells. A press can detonate a mine, which disables every cell
-    // and leaves nothing able to "reveal as a number" — so a bounded scan failed
-    // on roughly 0.5% of layouts depending on the seed. Whether a double act
-    // happened is a property of the press path, not of where the mine was, so it
-    // is checked on a board that is still live.
-    let numbered = null;
-    for (let attempt = 0; attempt < 10 && !numbered; attempt += 1) {
-        await act(async () => {
-            byText('Reset').click();
+    const move = async (el, init = {}) => {
+        const ev = new dom.window.PointerEvent('pointermove', {
+            bubbles: true,
+            cancelable: true,
+            ...init,
         });
-        for (const c of cells().filter(isFreeHidden)) {
-            await press(c);
-            if (/adjacent mines/.test(c.getAttribute('aria-label') || '')) {
-                numbered = c;
-                break;
-            }
-            // A mine went off: every cell is disabled, so this board can no
-            // longer produce the numbered reveal being looked for.
-            if (cells().every((cell) => cell.disabled)) break;
-        }
-    }
-    if (!numbered) {
-        check('press followed by release acts exactly once', false, 'no cell revealed as a number');
-    } else {
-        const afterPress = revealedCount();
+        Object.defineProperty(ev, 'pointerType', { value: init.pointerType ?? 'mouse' });
         await act(async () => {
-            numbered.click();
+            el.dispatchEvent(ev);
         });
-        check(
-            'press followed by release acts exactly once',
-            revealedCount() === afterPress,
-            `${afterPress} -> ${revealedCount()} (a second act would have chorded)`
-        );
-    }
+    };
+    // React synthesises `onPointerLeave` from the bubbling `pointerout`, so that
+    // is the event that has to be dispatched to reach the handler.
+    const leaveBoard = async () => {
+        const ev = new dom.window.PointerEvent('pointerout', { bubbles: true, cancelable: true });
+        Object.defineProperty(ev, 'pointerType', { value: 'mouse' });
+        Object.defineProperty(ev, 'relatedTarget', { value: document.body });
+        await act(async () => {
+            cells()[0].dispatchEvent(ev);
+        });
+    };
+    const up = async (el, init = {}) => {
+        const ev = new dom.window.PointerEvent('pointerup', {
+            bubbles: true,
+            cancelable: true,
+            ...init,
+        });
+        Object.defineProperty(ev, 'pointerType', { value: init.pointerType ?? 'mouse' });
+        await act(async () => {
+            el.dispatchEvent(ev);
+        });
+    };
 
-    // A press that wanders off gets no click, so the flag must not stay set and
-    // swallow the next real activation.
+    // A press on its own must do nothing, and must highlight its cell.
     await act(async () => {
         byText('Reset').click();
     });
-    const drifted = cells().find(isFreeHidden);
-    await press(drifted);
-    await pointerLeave(drifted);
-    await act(async () => {
-        drifted.click();
-    });
+    const start = cells()[0];
+    const startRef = start.getAttribute('data-cell');
+    await press(start);
     check(
-        'a press that wanders off does not block the next activation',
-        !/hidden/.test(drifted.getAttribute('aria-label') || ''),
-        drifted.getAttribute('aria-label')
+        'a press alone does not reveal',
+        /hidden/.test(start.getAttribute('aria-label') || ''),
+        start.getAttribute('aria-label')
+    );
+    check(
+        'a press highlights the cell under it',
+        pressing().length === 1,
+        `${pressing().length} highlighted`
+    );
+    check(
+        'and it is the pressed cell',
+        pressing()[0]?.getAttribute('data-cell') === startRef,
+        pressing()[0]?.getAttribute('data-cell')
     );
 
-    // Right and middle press are flag and chord, not reveal. Acting on any
-    // press would flag a cell and then reveal or chord it in one gesture.
+    // Moving the pointer while held moves the highlight, and opens nothing yet.
+    const hiddenRefs = cells()
+        .filter(isFreeHidden)
+        .map((c) => c.getAttribute('data-cell'));
+    const second = cellByRef(hiddenRefs.find((r) => r !== startRef));
+    await move(second);
+    check(
+        'the highlight follows the pointer',
+        pressing()[0]?.getAttribute('data-cell') === second.getAttribute('data-cell'),
+        pressing()[0]?.getAttribute('data-cell')
+    );
+    check('still only one cell highlighted', pressing().length === 1);
+    check(
+        'nothing is revealed while the button is still down',
+        /hidden/.test(start.getAttribute('aria-label') || '') &&
+            /hidden/.test(second.getAttribute('aria-label') || '')
+    );
+
+    // The release opens the cell it finished on.
+    await up(second);
+    check(
+        'the release opens the cell it finished on',
+        !/hidden/.test(second.getAttribute('aria-label') || ''),
+        second.getAttribute('aria-label')
+    );
+    check(
+        'the highlight clears on release',
+        pressing().length === 0,
+        `${pressing().length} highlighted`
+    );
+
+    // "And nothing else" is the part worth pinning, and it has to be phrased
+    // carefully: a flood fill out of the release cell can legitimately reach the
+    // cell the press started on, so that cell's own label proves nothing either
+    // way. What must hold is that the drag opens exactly what a click on the
+    // release cell opens — no more, and no less.
+    const revealedSet = () =>
+        cells()
+            .map((c, i) => (/hidden/.test(c.getAttribute('aria-label') || '') ? '' : i))
+            .join(',');
+    const afterDrag = revealedSet();
+
+    await act(async () => {
+        byText('Reset').click();
+    });
+    await press(second);
+    await up(second);
+    check(
+        'a drag opens exactly what a click on the release cell opens',
+        revealedSet() === afterDrag
+    );
+
+    // The browser still synthesises a click after that release. It must not
+    // open a second time, so the count has to match a plain press-and-release.
+    await act(async () => {
+        byText('Reset').click();
+    });
+    const solo = cells().find(isFreeHidden);
+    await press(solo);
+    await up(solo);
+    const afterRelease = revealedCount();
+    await act(async () => {
+        solo.click();
+    });
+    check(
+        'the click that follows a release does not act again',
+        revealedCount() === afterRelease,
+        `${afterRelease} -> ${revealedCount()}`
+    );
+
+    // Press and release on one cell is the ordinary click, and it must open it.
+    await act(async () => {
+        byText('Reset').click();
+    });
+    const plain = cells().find(isFreeHidden);
+    await press(plain);
+    await up(plain);
+    check(
+        'press and release on one cell opens it',
+        !/hidden/.test(plain.getAttribute('aria-label') || ''),
+        plain.getAttribute('aria-label')
+    );
+
+    // Cells are 3px apart, so a release can land in a gap. The cell that was lit
+    // is the one the player saw aimed at, so that is the one that must open —
+    // otherwise a release 1px off a cell reads as the board losing a click.
+    await act(async () => {
+        byText('Reset').click();
+    });
+    const gapTarget = cells()[0];
+    await press(gapTarget);
+    // `pointerup` on the board itself is exactly what a gap release looks like:
+    // the event target is not a cell.
+    await act(async () => {
+        const ev = new dom.window.PointerEvent('pointerup', { bubbles: true, cancelable: true });
+        Object.defineProperty(ev, 'pointerType', { value: 'mouse' });
+        $('#minefield').dispatchEvent(ev);
+    });
+    check(
+        'a release in a gap opens the cell that was lit',
+        !/hidden/.test(gapTarget.getAttribute('aria-label') || ''),
+        gapTarget.getAttribute('aria-label')
+    );
+
+    // And a press that never lit a cell commits nothing, so a release over the
+    // bare board is not a click the player ever started.
+    await act(async () => {
+        byText('Reset').click();
+    });
+    await press($('#minefield'));
+    await act(async () => {
+        const ev = new dom.window.PointerEvent('pointerup', { bubbles: true, cancelable: true });
+        Object.defineProperty(ev, 'pointerType', { value: 'mouse' });
+        $('#minefield').dispatchEvent(ev);
+    });
+    check(
+        'a release over no cell opens nothing',
+        revealedCount() === 0,
+        `${revealedCount()} revealed`
+    );
+
+    // Leaving the board mid-press abandons it: a later release over a cell is
+    // not a click the player ever started.
+    await act(async () => {
+        byText('Reset').click();
+    });
+    const wanderer = cells().find(isFreeHidden);
+    await press(wanderer);
+    await leaveBoard();
+    check(
+        'leaving the board clears the highlight',
+        pressing().length === 0,
+        `${pressing().length} highlighted`
+    );
+    await up(wanderer);
+    check(
+        'a release after leaving does not open a cell',
+        /hidden/.test(wanderer.getAttribute('aria-label') || ''),
+        wanderer.getAttribute('aria-label')
+    );
+
+    // Right and middle press are flag and chord, handled by the cell. They must
+    // not arm, or the board would open the cell those gestures are aimed at.
     await act(async () => {
         byText('Reset').click();
     });
@@ -325,23 +480,62 @@ check(
         const c = cells().find(isFreeHidden);
         await press(c, { button });
         check(
+            `a ${label} press does not arm`,
+            pressing().length === 0,
+            `${label}: ${pressing().length}`
+        );
+        check(
             `a ${label} press does not reveal`,
             /hidden/.test(c.getAttribute('aria-label') || ''),
             `${label}: ${c.getAttribute('aria-label')}`
         );
     }
 
-    // Touch keeps the long-press path; revealing on press would defeat it.
+    // Touch keeps the long-press path, so a touch press must not arm either.
     await act(async () => {
         byText('Reset').click();
     });
     const touchy = cells().find(isFreeHidden);
     await press(touchy, { pointerType: 'touch' });
+    check('a touch press does not arm', pressing().length === 0, `${pressing().length}`);
     check(
         'a touch press does not reveal (long press owns touch)',
         /hidden/.test(touchy.getAttribute('aria-label') || ''),
         touchy.getAttribute('aria-label')
     );
+
+    // The three rules that decide reveal-vs-chord have one definition, shared
+    // by the cell and the board, because two copies of them is how a flag
+    // removal once vanished.
+    check(
+        'cells and the board share one set of gesture rules',
+        /cellGestures\(\{/.test(cellCode) && /cellGestures\(\{/.test(code(boardSrc)),
+        'cellGestures'
+    );
+
+    // One definition, imported by both. Two copies of these three rules is how a
+    // flag removal once vanished, so the shape is pinned rather than trusted.
+    check(
+        'cellGestures is exported once, from the cell module',
+        (code(cellJsSrc).match(/export function cellGestures/g) || []).length === 1
+    );
+
+    // Leave the custom config the way it was found: unseeded. A later block
+    // asserts the seed field is hidden until the box is ticked, and a seed left
+    // behind here would leave it permanently ticked.
+    await act(async () => {
+        byText('Custom').click();
+    });
+    await act(async () => {
+        $('input[type="checkbox"]').click();
+    });
+    await act(async () => {
+        byText('Apply').click();
+    });
+    await act(async () => {
+        byText('Beginner').click();
+    });
+    check('the custom config is left unseeded', $('input[type="text"]') === null);
 }
 
 // Board is `memo`ized, and the model it renders mutates in place — so on a
@@ -1082,18 +1276,6 @@ check(
     `${boardWidth(30) + GUTTER} <= 1920`
 );
 
-// Cells must size from the shared variable so tracks and cells agree. The
-// rules live in Emotion's sheet, which jsdom does not expose, so read the
-// component source instead of guessing.
-const boardSrc = await (
-    await import('node:fs/promises')
-).readFile('src/components/Board.jsx', 'utf8');
-const cellSrc = await (
-    await import('node:fs/promises')
-).readFile('src/components/CellButton.jsx', 'utf8');
-// Strip comments before scanning, so prose about old approaches isn't mistaken
-// for real code.
-const code = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
 // The cell size must be a plain constant. Any viewport- or container-relative
 // unit (vw, cqi, %, clamp, min) means cells would vary with board size again.
 check(
@@ -1117,7 +1299,6 @@ check('no hardcoded 30px cell width', !/width:\s*30\s*,/.test(cellSrc));
 // the instant it was clicked, and fast play lost presses at cell edges.
 //
 // Every effect on a cell must be paint-only: background, shadow, colour.
-const cellCode = code(cellSrc);
 check(
     'cells never declare a transform',
     !/\btransform\s*:/.test(cellCode),

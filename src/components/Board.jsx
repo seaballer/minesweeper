@@ -2,6 +2,7 @@ import { memo, useCallback, useLayoutEffect, useRef, useState } from 'react';
 import Box from '@mui/material/Box';
 import { useTheme } from '@mui/material/styles';
 import CellButton from './CellButton.jsx';
+import { cellGestures } from '../game/Cell.js';
 
 // Spacing constants, named so the sizing math stays readable and the test
 // harness can import the same numbers instead of hand-copying them.
@@ -49,6 +50,105 @@ function Board({ grid, version: _version, boardId, onReveal, onFlag, onChord, di
     // grid with no tabbable cell at all.
     const cursorRow = Math.min(cursor.row, grid.rows - 1);
     const cursorCol = Math.min(cursor.col, grid.cols - 1);
+
+    // --- The held-press gesture ---
+    //
+    // Arm on press, follow the pointer while the button is down, commit on
+    // release against whatever cell the pointer is over at that moment. So a
+    // drag opens the cell you *let go over*, not the one you started on.
+    //
+    // `armed` is a ref, not state: nothing renders differently when a press
+    // arms, so putting it in state would re-render every cell twice per press
+    // for nothing. Only `pressing` — the one cell being highlighted — is state,
+    // and moving it changes exactly two cells' props.
+    const armed = useRef(false);
+    const [pressing, setPressing] = useState(null);
+    // The highlighted cell, also held in a ref so the release can read it after
+    // the highlight is cleared. The state is what renders; the ref is what the
+    // gesture logic consults, which keeps the two from depending on a render
+    // having happened in between.
+    const pressingRef = useRef(null);
+
+    const showPressing = (next) => {
+        // A null `next` means the pointer is over one of the gaps between cells.
+        // Keep the current cell lit rather than blanking the highlight, so it
+        // neither flickers on the way past nor leaves the release with nothing
+        // to commit to.
+        if (!next) return;
+        const prev = pressingRef.current;
+        // Bail out when nothing moved, so React skips the board re-render that
+        // every pointer event would otherwise cause.
+        if (prev && prev.row === next.row && prev.col === next.col) return;
+        pressingRef.current = next;
+        setPressing(next);
+    };
+
+    const clearPressing = () => {
+        if (pressingRef.current === null) return;
+        pressingRef.current = null;
+        setPressing(null);
+    };
+
+    // The cell under a pointer event, or null if the pointer is not over one.
+    const cellAt = (target) => {
+        const where = target?.closest?.('[data-cell]')?.getAttribute('data-cell');
+        if (!where) return null;
+        const [row, col] = where.split('-').map(Number);
+        return { row, col };
+    };
+
+    // Only a primary-button press from a mouse or pen arms. Touch keeps its
+    // long-press-to-flag path, and right or middle press is flag or chord, which
+    // the cell handles itself — arming those would fight with it.
+    const isArmingPress = (event) =>
+        event.pointerType !== 'touch' && event.button === 0 && !disabled;
+
+    const onPointerDown = (event) => {
+        if (!isArmingPress(event)) return;
+        armed.current = true;
+        showPressing(cellAt(event.target));
+    };
+
+    const onPointerMove = (event) => {
+        if (!armed.current) return;
+        showPressing(cellAt(event.target));
+    };
+
+    const onPointerUp = (event) => {
+        if (!armed.current) return;
+        armed.current = false;
+
+        // Falls back to the highlighted cell when the release lands in one of
+        // those gaps. The player watched that cell light up, so that is the one
+        // that should open; dropping the gesture because a release landed 1px
+        // off a cell would read as the board losing a click.
+        const target = cellAt(event.target) ?? pressingRef.current;
+        clearPressing();
+        if (!target) return;
+        const cell = grid.cells[target.row][target.col];
+        // The same three rules the cell uses for itself, from the same function,
+        // so the two cannot disagree about what activating a cell means.
+        const { canReveal, canChord } = cellGestures({
+            disabled,
+            isMine: cell.isMine,
+            isVisible: cell.isVisible,
+            isFlagged: cell.isFlagged,
+            neighborMines: cell.neighborMines,
+        });
+        if (canReveal) {
+            onReveal(target.row, target.col);
+        } else if (canChord) {
+            onChord(target.row, target.col);
+        }
+    };
+
+    // Releasing away from the board, or the gesture being cancelled, abandons
+    // the press. Nothing is opened, and a stray release over a cell later is not
+    // a click the player ever started.
+    const onPointerCancel = () => {
+        armed.current = false;
+        clearPressing();
+    };
 
     // A new board puts the cursor back at the top left.
     //
@@ -150,6 +250,13 @@ function Board({ grid, version: _version, boardId, onReveal, onFlag, onChord, di
             ref={boardRef}
             onFocus={onFocus}
             onKeyDown={onKeyDown}
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={onPointerUp}
+            onPointerCancel={onPointerCancel}
+            // Releasing outside the board sends no pointerup here, so the press
+            // would stay armed. Leaving abandons it.
+            onPointerLeave={onPointerCancel}
             sx={{
                 display: 'grid',
                 // `--cell` is the single source of truth for cell size, read by
@@ -207,6 +314,7 @@ function Board({ grid, version: _version, boardId, onReveal, onFlag, onChord, di
                             // are reachable only by arrow keys or script.
                             tabIndex={cursorRow === rowIndex && cursorCol === colIndex ? 0 : -1}
                             cellRef={`${rowIndex}-${colIndex}`}
+                            isPressing={pressing?.row === rowIndex && pressing?.col === colIndex}
                         />
                     ))}
                 </Box>

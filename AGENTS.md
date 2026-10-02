@@ -9,7 +9,7 @@ testable outside a browser.
 - `npm run dev` — Vite dev server on <http://localhost:5173>
 - `npm run build` — production bundle into `dist/`
 - `npm run preview` — serve the built bundle
-- `npm test` — both suites: the jsdom UI harness (319 assertions) and the model unit tests
+- `npm test` — both suites: the jsdom UI harness (336 assertions) and the model unit tests
 - `npm run test:model` — just `node --test test/`, the model suite on its own (33 tests)
 - `npm run lint` — ESLint (`react-hooks` rules included). Must be clean before committing.
 - `npm run format` / `npm run format:check` — Prettier. The config matches the
@@ -280,11 +280,59 @@ anything.**
 A single large flood fill legitimately costs a whole board re-render. That is one
 render, not a dropped click.
 
+## The held-press gesture
+
+`Board` owns the whole press, and **a cell must not act on `click` or on
+`pointerdown`.** Both of those were tried and both were wrong:
+
+- **`click` loses every fast click.** A browser fires it only when the mousedown
+  and mouseup targets **agree**; when they disagree it dispatches to their
+  **nearest common ancestor** instead — the board.
+- **`pointerdown` opens the wrong cell.** It fires on the element the press
+  _started_ on, so dragging from A to B opened A. Press-and-hold has to open the
+  cell you let go over.
+
+`Board` arms on `pointerdown`, follows the pointer while the button is held, and
+commits on `pointerup` against the cell under the cursor at that moment.
+`pointerup` has no down/up agreement requirement, which is why it fixed the
+fast-click bug and is also what makes the drag work.
+
+- **`armed` is a ref, `pressing` is state.** Nothing renders differently when a
+  press arms, so arming in state would re-render 480 cells twice per press for
+  nothing. Only the one highlighted cell is state, and moving it changes exactly
+  two cells' props. `showPressing` also returns the previous object when the
+  cell has not changed, so ordinary hovering costs nothing.
+- **`pressingRef` mirrors `pressing`** so the release can read the highlighted
+  cell _after_ clearing the highlight, without depending on a render landing in
+  between. No effect needed, and no `setState` inside one.
+- **A release in a gap falls back to the highlighted cell.** Cells are 3px apart,
+  so a release can land between two of them. The player watched that cell light
+  up, so that is the one that opens — otherwise a release 1px off a cell reads as
+  the board losing a click, which is the exact bug this whole section is about.
+  `showPressing(null)` deliberately keeps the last cell lit for the same reason.
+- **Releasing off the board commits nothing** and clears the highlight. A press
+  that ends outside the grid is not a click the player started, and `pointerup`
+  never reaches the board in that case anyway; `onPointerLeave` is what stops a
+  stale highlight being left behind.
+- **Only a primary-button, non-touch press arms.** Touch keeps long-press-to-flag
+  — acting on press there would reveal the very cell the long press exists to
+  flag. Right and middle press are flag and chord, which the cell handles itself;
+  arming them would open the cell those gestures are aimed at.
+- **`onClick` in the cell is now only for touch and keyboard.** A mouse press is
+  committed by the board, and the `click` the browser synthesises afterwards
+  would double-act, so the cell swallows it. `touchedByFinger` distinguishes a
+  tap's click, and `event.detail === 0` distinguishes a keyboard one.
+
+**`cellGestures` is the single definition of "what does activating this cell
+do."** It lives in `src/game/Cell.js` and both `CellButton` and `Board` call it.
+Two copies of `canReveal` / `canFlag` / `canChord` is how a flag removal once
+vanished — the cell thought it was revealed, the board thought it was flaggable.
+`npm test` asserts there is exactly one export of it.
+
 ## The trap that ate _every_ click: acting on `click` instead of press
 
-**A cell acts on `pointerdown`, not on `click`. Do not move this back to
-`onClick`.** This is not a latency preference; it is the difference between a
-board that works and one that ignores you.
+**A cell must never act on `click`.** This is not a latency preference; it is
+the difference between a board that works and one that ignores you.
 
 A browser fires `click` only when the mousedown and mouseup targets **agree**.
 When they disagree, it dispatches the click to their **nearest common ancestor**
