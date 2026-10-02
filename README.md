@@ -12,14 +12,14 @@ npm install     # first time only
 npm run dev     # http://localhost:5173
 ```
 
-| Command                  | Does                                                          |
-| ------------------------ | ------------------------------------------------------------- |
+| Command                | Does                                                          |
+| ---------------------- | ------------------------------------------------------------- |
 | `npm run dev`          | Dev server with hot reload                                    |
-| `npm run build`        | Production bundle into`dist/`                               |
+| `npm run build`        | Production bundle into`dist/`                                 |
 | `npm run preview`      | Serve the built bundle                                        |
-| `npm test`             | Both suites: the UI in jsdom (310 assertions), then the model |
-| `npm run test:model`   | Just the model unit tests (33) — no browser, no jsdom        |
-| `npm run lint`         | ESLint,`react-hooks` rules included                         |
+| `npm test`             | Both suites: the UI in jsdom (319 assertions), then the model |
+| `npm run test:model`   | Just the model unit tests (33) — no browser, no jsdom         |
+| `npm run lint`         | ESLint,`react-hooks` rules included                           |
 | `npm run format`       | Prettier, writes in place                                     |
 | `npm run format:check` | Prettier, reports only                                        |
 
@@ -87,7 +87,7 @@ Two test suites, split by what each can observe:
   flood-fill boundaries, win detection, the flag tally, chording, and the
   coordinate contracts. No mounting, so a failure points at a rule.
 - `ui-check.mjs` stands up jsdom, loads `App` through Vite SSR so JSX compiles,
-  and drives it the way a player would — 310 assertions, no browser. It imports
+  and drives it the way a player would — 319 assertions, no browser. It imports
   `GAP`, `BOARD_CHROME`, and `CELL` from `Board.jsx` so it asserts the same
   sizing arithmetic the CSS encodes rather than a hand-copied version.
 
@@ -138,8 +138,8 @@ board alone, so a won game can't be flipped to a loss.
 Reveals a cell and floods outward through any zero-count cells. **Always returns
 a status string**, never `undefined`:
 
-| Return value   | Meaning                                                          |
-| -------------- | ---------------------------------------------------------------- |
+| Return value | Meaning                                                          |
+| ------------ | ---------------------------------------------------------------- |
 | `"ready"`    | A no-op before the first reveal, while the board is unplaced     |
 | `"playing"`  | The reveal succeeded, or the cell was already visible or flagged |
 | `"win"`      | The last safe cell was revealed                                  |
@@ -201,27 +201,27 @@ presentational and does not affect play.
 
 Presets, as rows × cols and mines:
 
-| Preset       | Size           | Mines                  |
-| ------------ | -------------- | ---------------------- |
-| Beginner     | 9 × 9         | 10                     |
-| Intermediate | 16 × 16       | 40                     |
-| Expert       | 16 × 30       | 99                     |
+| Preset       | Size        | Mines                |
+| ------------ | ----------- | -------------------- |
+| Beginner     | 9 × 9       | 10                   |
+| Intermediate | 16 × 16     | 40                   |
+| Expert       | 16 × 30     | 99                   |
 | Custom       | 2–30 × 2–30 | 1 to rows × cols − 1 |
 
-| Gesture                                        | Does                                               |
-| ---------------------------------------------- | -------------------------------------------------- |
-| Left click                                     | Reveal a cell                                      |
-| Right click                                    | Flag a cell, or remove a flag                      |
+| Gesture                                        | Does                                              |
+| ---------------------------------------------- | ------------------------------------------------- |
+| Left click                                     | Reveal a cell                                     |
+| Right click                                    | Flag a cell, or remove a flag                     |
 | Click / middle click / right click on a number | Chord — reveal its neighbors once the flags match |
-| `F`                                          | Flag the focused cell                              |
-| `C`                                          | Chord the focused cell                             |
-| `R`                                          | Reset                                              |
-| `Tab`                                        | Enter the board once, then leave it                |
-| Arrow keys                                     | Move the cursor around the board                   |
-| `Home` / `End`                             | Jump to the ends of the current row                |
-| `Ctrl` + `Home` / `End`                  | Jump to the first / last cell of the board         |
-| `PageUp` / `PageDown`                      | Move four rows                                     |
-| `Enter` / `Space`                          | Reveal or chord the focused cell                   |
+| `F`                                            | Flag the focused cell                             |
+| `C`                                            | Chord the focused cell                            |
+| `R`                                            | Reset                                             |
+| `Tab`                                          | Enter the board once, then leave it               |
+| Arrow keys                                     | Move the cursor around the board                  |
+| `Home` / `End`                                 | Jump to the ends of the current row               |
+| `Ctrl` + `Home` / `End`                        | Jump to the first / last cell of the board        |
+| `PageUp` / `PageDown`                          | Move four rows                                    |
+| `Enter` / `Space`                              | Reveal or chord the focused cell                  |
 
 **Keyboard.** The board is a real ARIA grid and it is **one tab stop**, not one
 per cell — otherwise Tab would walk 81 buttons on Beginner and 480 on Expert.

@@ -134,6 +134,12 @@ export function useMinesweeper(initialDifficulty = DEFAULT_DIFFICULTY) {
         version,
         difficulty: DIFFICULTIES[difficultyKey],
         customSize,
+        // Bumped on every NEW board — reset, difficulty switch, or applied size —
+        // which is exactly when the view's focus cursor should go home. It
+        // already existed to restart the clock; `Board` reuses it rather than
+        // inferring a reset from a grid comparison that reset cannot produce,
+        // since a reset keeps the same dimensions.
+        boardId: gameId,
         status: grid.status,
         isOver,
         minesRemaining,

@@ -641,6 +641,94 @@ check(
     await act(async () => {
         byText('Beginner').click();
     });
+
+    // A new board sends the cursor home.
+    //
+    // Reset used to leave the cursor wherever the player left it: a reset keeps
+    // the grid's dimensions, so clamping could not pull it back into range and
+    // nothing reset it. Tab then entered the fresh board wherever focus had
+    // been, and Shift+Tab off the Reset button returned there rather than to
+    // the start. `boardId` from the hook is the signal, since it bumps on reset,
+    // a difficulty switch and an applied size alike.
+    const parkBottomRight = async () => {
+        tabbable()[0].focus();
+        await press('End', { ctrlKey: true });
+    };
+
+    // Reset by button: the tab stop goes home, but focus stays on the button
+    // the player pressed rather than being yanked back onto the board.
+    await parkBottomRight();
+    check('parked the cursor bottom right', focusedCell() === '8-8', focusedCell());
+    await act(async () => {
+        byText('Reset').click();
+    });
+    check(
+        'reset sends the cursor home',
+        tabbable()[0]?.getAttribute('data-cell') === '0-0',
+        tabbable()[0]?.getAttribute('data-cell')
+    );
+    // The non-steal is asserted from the OTHER direction: focus is parked on a
+    // cell, so the board's layout effect sees focus inside itself and is
+    // expected to pull it home. That it does is the positive case below. Here
+    // jsdom's `click()` leaves focus on the cell rather than moving it to the
+    // button — jsdom does not move focus on click, per the note above — so what
+    // can be checked here is only that the cursor did go home, which the
+    // assertion above already covers. Stealing focus off the Reset button is a
+    // browser-only behaviour and is not observable in this harness.
+    check(
+        'reset does not leave the cursor parked where focus was',
+        tabbable()[0]?.getAttribute('data-cell') === '0-0' && focusedCell() === '0-0',
+        `${tabbable()[0]?.getAttribute('data-cell')} / focus ${focusedCell()}`
+    );
+
+    // Reset by keyboard, from a focused cell: focus is already on the board, so
+    // it follows the cursor home.
+    await parkBottomRight();
+    await press('r');
+    check('R resets the board', focusedCell() === '0-0', focusedCell());
+    check(
+        'and the tab stop comes with it',
+        tabbable()[0]?.getAttribute('data-cell') === '0-0',
+        tabbable()[0]?.getAttribute('data-cell')
+    );
+
+    // A difficulty switch is a new board too.
+    await parkBottomRight();
+    await act(async () => {
+        byText('Intermediate').click();
+    });
+    check(
+        'a difficulty switch sends the cursor home',
+        tabbable()[0]?.getAttribute('data-cell') === '0-0',
+        tabbable()[0]?.getAttribute('data-cell')
+    );
+    check('still one tab stop after a switch', tabbable().length === 1);
+
+    // The other half of the guard: focus OUTSIDE the board must survive a new
+    // board. Pressing the Reset button leaves focus on that button, so a layout
+    // effect that pulled focus home unconditionally would yank the user out of
+    // the control they just used. Driven with `.focus()`, since jsdom's `click()`
+    // does not move focus.
+    await act(async () => {
+        byText('Reset').focus();
+    });
+    check(
+        'focus starts outside the board',
+        document.activeElement === byText('Reset'),
+        document.activeElement?.textContent?.trim()
+    );
+    await act(async () => {
+        byText('Beginner').click();
+    });
+    check(
+        'a new board does not steal focus from outside the board',
+        document.activeElement === byText('Reset'),
+        document.activeElement?.textContent?.trim() ?? String(document.activeElement?.tagName)
+    );
+
+    await act(async () => {
+        byText('Beginner').click();
+    });
 }
 
 // --- Layout: readouts above the board, title centered and caps ---

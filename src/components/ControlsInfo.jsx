@@ -18,6 +18,18 @@ const CONTROLS = [
     ['Middle click', 'Chord, same as clicking a number'],
 ];
 
+// The board is an ARIA grid, so it is one tab stop and the arrows move within
+// it. That navigation is listed here because it is otherwise undiscoverable: a
+// user cannot guess that the board is a grid, and Tab alone only ever reaches
+// the one cell the cursor is parked on.
+const NAVIGATION = [
+    ['Tab', 'Enter and leave the board as a single stop'],
+    ['Arrows', 'Move between cells'],
+    ['Page Up / Down', 'Jump four rows'],
+    ['Home / End', 'Start and end of the row'],
+    ['Ctrl Home / End', 'First and last cell of the board'],
+];
+
 const KEYS = [
     ['F', 'Flag the focused cell'],
     ['C', 'Chord the focused cell'],
@@ -154,6 +166,8 @@ export default function ControlsInfo({ open, onOpenChange }) {
                     Controls
                 </Typography>
                 <Section title="Mouse" rows={CONTROLS} mono={theme.mono} />
+                <Divider sx={{ my: 1.5, borderColor: 'divider' }} />
+                <Section title="Moving around" rows={NAVIGATION} mono={theme.mono} />
                 <Divider sx={{ my: 1.5, borderColor: 'divider' }} />
                 <Section title="Keyboard" rows={KEYS} mono={theme.mono} />
                 <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>

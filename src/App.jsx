@@ -22,6 +22,7 @@ export default function App() {
     const {
         grid,
         version,
+        boardId,
         difficulty,
         customSize,
         status,
@@ -176,6 +177,10 @@ export default function App() {
                             // place, so without this it would never repaint.
                             // See the note on `version` in useMinesweeper.
                             version={version}
+                            // Bumped on every new board, so Board knows to send
+                            // its focus cursor home. A reset keeps the grid's
+                            // dimensions, so Board cannot infer it any other way.
+                            boardId={boardId}
                             onReveal={reveal}
                             onFlag={toggleFlag}
                             onChord={chord}

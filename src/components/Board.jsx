@@ -1,4 +1,4 @@
-import { memo, useCallback, useRef, useState } from 'react';
+import { memo, useCallback, useLayoutEffect, useRef, useState } from 'react';
 import Box from '@mui/material/Box';
 import { useTheme } from '@mui/material/styles';
 import CellButton from './CellButton.jsx';
@@ -29,7 +29,7 @@ export { GAP, BOARD_CHROME, PAD, BORDER, CELL };
  * this that rebuilt all 480 cells every quarter second to redraw one clock.
  * Now the tick leaves the board alone and only a real move repaints it.
  */
-function Board({ grid, version: _version, onReveal, onFlag, onChord, disabled }) {
+function Board({ grid, version: _version, boardId, onReveal, onFlag, onChord, disabled }) {
     const theme = useTheme();
     const boardRef = useRef(null);
 
@@ -49,6 +49,42 @@ function Board({ grid, version: _version, onReveal, onFlag, onChord, disabled })
     // grid with no tabbable cell at all.
     const cursorRow = Math.min(cursor.row, grid.rows - 1);
     const cursorCol = Math.min(cursor.col, grid.cols - 1);
+
+    // A new board puts the cursor back at the top left.
+    //
+    // Adjusted DURING render rather than in an effect: React's guidance is to
+    // reset state keyed on a prop change this way, and `setState` inside a
+    // `useEffect` would cascade an extra commit and trip
+    // `react-hooks/set-state-in-effect`. React discards the render output and
+    // re-runs immediately with the corrected state, before anything is
+    // committed — so no stale tab stop is ever painted.
+    //
+    // This matters because clamping alone is not enough. A reset keeps the same
+    // dimensions, so the cursor stayed wherever the player left it: after
+    // resetting from the bottom-right, Tab entered the fresh board at the
+    // bottom-right, and Shift+Tab off the Reset button returned there rather
+    // than to the start.
+    const [lastBoardId, setLastBoardId] = useState(boardId);
+    const isNewBoard = boardId !== lastBoardId;
+    if (isNewBoard) {
+        setLastBoardId(boardId);
+        setCursor({ row: 0, col: 0 });
+    }
+
+    // Focus follows the cursor home, but ONLY when focus was already inside the
+    // board. Clicking Reset moves focus to the Reset button, and stealing it
+    // back would yank the user out of the control they just pressed. Pressing
+    // `R` from a focused cell keeps focus on the board, so it does follow.
+    //
+    // A layout effect so the move lands before paint, avoiding a visible frame
+    // with the old cell focused. It touches no state — only the DOM — so it
+    // cannot trip the rule the render-time adjust above avoids.
+    useLayoutEffect(() => {
+        if (!boardRef.current?.contains(document.activeElement)) {
+            return;
+        }
+        boardRef.current.querySelector('[data-cell="0-0"]')?.focus();
+    }, [boardId]);
 
     const focusCell = useCallback(
         (row, col) => {

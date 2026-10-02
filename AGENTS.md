@@ -9,7 +9,7 @@ testable outside a browser.
 - `npm run dev` — Vite dev server on <http://localhost:5173>
 - `npm run build` — production bundle into `dist/`
 - `npm run preview` — serve the built bundle
-- `npm test` — both suites: the jsdom UI harness (310 assertions) and the model unit tests
+- `npm test` — both suites: the jsdom UI harness (319 assertions) and the model unit tests
 - `npm run test:model` — just `node --test test/`, the model suite on its own (33 tests)
 - `npm run lint` — ESLint (`react-hooks` rules included). Must be clean before committing.
 - `npm run format` / `npm run format:check` — Prettier. The config matches the
@@ -46,11 +46,25 @@ cell** — without that, Tab would walk 81 buttons on Beginner and 480 on Expert
 - **Roving tabindex.** Exactly one cell carries `tabIndex={0}`; the rest are
   `-1`, so they are still focusable by script and by arrow keys but unreachable
   by Tab. `npm test` asserts there is exactly one.
-- **The cursor is clamped at read time, not reset by an effect.** `cursorRow` and
-  `cursorCol` are `Math.min` against the board's dimensions on every render, so
-  shrinking the board can never leave the grid with no tabbable cell. Resetting
-  it in a `useEffect` would also mean a `setState` inside an effect, which
-  cascades a render and trips `react-hooks/set-state-in-effect`.
+- **The cursor is clamped at read time, and sent home on a new board.** `cursorRow`
+  and `cursorCol` are `Math.min` against the board's dimensions on every render, so
+  shrinking the board can never leave the grid with no tabbable cell. Clamping is
+  not enough on its own, though: a reset keeps the same dimensions, so the cursor
+  used to stay wherever the player left it — Tab entered the fresh board mid-way
+  through, and Shift+Tab off the Reset button returned there rather than to the
+  start. `useMinesweeper` therefore exposes `boardId` (the `gameId` that already
+  restarts the clock), which bumps on reset, a difficulty switch and an applied
+  size alike. `Board` resets the cursor **during render**, comparing `boardId` to
+  the last one it saw, per React's guidance for adjusting state on a prop change.
+  A `useEffect` here would mean `setState` inside an effect, cascading a render and
+  tripping `react-hooks/set-state-in-effect`.
+- **Focus follows the cursor home only from inside the board.** A layout effect
+  re-points focus at cell `0-0`, but only when `boardRef` already contains
+  `document.activeElement`. Pressing the Reset button leaves focus on that button,
+  and stealing it back would yank the user out of the control they just used;
+  pressing `R` from a focused cell keeps focus on the board, so it does follow. It
+  is a layout effect so the move lands before paint, and it touches no state, so it
+  cannot trip the rule the render-time adjust above avoids.
 - **Focus follows focus.** `onFocus` on the grid re-points the cursor at
   whatever actually holds focus, so the tab stop follows a click or a Tab as well
   as an arrow. Without it, Tab would leave the board from wherever the cursor
@@ -63,14 +77,19 @@ cell** — without that, Tab would walk 81 buttons on Beginner and 480 on Expert
   first or last cell of the board. Movement clamps rather than wrapping.
 - **Rows are `display: contents`.** A row owns its semantics without owning a
   box, so the cells stay direct children of the CSS grid and the
-  `gridTemplateColumns` / `gap` arithmetic is untouched. Verified over CDP that
-  the rows and all 81 gridcells do reach the accessibility tree despite it,
-  which is the thing that would have made the `grid` role a lie.
+  `gridTemplateColumns` / `gap` arithmetic is untouched. **This is the one claim
+  in this section that `npm test` cannot check.** jsdom has no accessibility
+  tree, so the suite asserts the roles exist in the DOM — one `row` per board
+  row, 81 `gridcell`s, all 81 owned by a `row` — and nothing about whether they
+  survive to a screen reader. Whether `display: contents` drops a box from the
+  accessibility tree is a real-browser question; check it there before trusting
+  the `grid` role.
 
 **jsdom's `click()` does not move focus** — it dispatches the event and leaves
 `document.activeElement` alone. Driving a focus test with it tests the shim, so
 the harness uses `.focus()`. That a real click focuses the button is the
-browser's behaviour, and is asserted in the Chromium checks.
+browser's behaviour and is **not** asserted anywhere: there is no browser driver
+in this repo. Treat it as an untested assumption rather than a verified fact.
 
 ## Best times
 
