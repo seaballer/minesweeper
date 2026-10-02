@@ -1330,6 +1330,21 @@ check(
 );
 check('the held look comes from the tracked cell, not :active', !/&:active/.test(cellCode));
 
+// A held cell must reach its held look on the first painted frame. The board
+// transitions `box-shadow` for the reveal, and if that transition also applied
+// on the way *in* then a cell the pointer had just reached was still partway
+// down — a sweep outran the 120ms and the fully-held frame never appeared.
+//
+// The pattern is checked rather than the value: `transition` has to be
+// conditional on `isPressing`, with `none` on the held branch. Asserting the
+// exact string would break on a reworded duration without catching a real
+// regression, which is the same trade as every other source scan here.
+check(
+    'a held cell skips its transition so it looks held at once',
+    /transition:\s*isPressing\s*\?\s*'none'/.test(cellCode),
+    (cellCode.match(/transition:[^;]*/g) || []).join(' | ')
+);
+
 // A dotted string in `sx` is NOT a theme reference. MUI resolves only the
 // shorthands it knows (`primary.main`, `text.secondary`, `divider`, …); any
 // other dotted string is emitted into the stylesheet verbatim —

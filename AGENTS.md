@@ -9,7 +9,7 @@ testable outside a browser.
 - `npm run dev` — Vite dev server on <http://localhost:5173>
 - `npm run build` — production bundle into `dist/`
 - `npm run preview` — serve the built bundle
-- `npm test` — both suites: the jsdom UI harness (337 assertions) and the model unit tests
+- `npm test` — both suites: the jsdom UI harness (338 assertions) and the model unit tests
 - `npm run test:model` — just `node --test test/`, the model suite on its own (33 tests)
 - `npm run lint` — ESLint (`react-hooks` rules included). Must be clean before committing.
 - `npm run format` / `npm run format:check` — Prettier. The config matches the
@@ -322,6 +322,16 @@ fast-click bug and is also what makes the drag work.
   committed by the board, and the `click` the browser synthesises afterwards
   would double-act, so the cell swallows it. `touchedByFinger` distinguishes a
   tap's click, and `event.detail === 0` distinguishes a keyboard one.
+- **A held cell must arrive at its held look with no transition.**
+  `transition: none` while `isPressing`, the usual timing otherwise. The board
+  keeps a `box-shadow 120ms ease` for the _reveal_, and that transition was
+  animating the held cell **into** its sunk shadow — so a cell the pointer had
+  just reached was still partway down, and a sweep across the board outran the
+  animation entirely. The fully-held frame was never painted; the gesture read as
+  no styling at all. Suppressing the transition while held fixes the arrival and
+  keeps the release, because a cell dropping out of the held look eases back up
+  — that is the feedback that the press committed. A brief trail of easing cells
+  is the intended result, not a stuck one: each clears within the 120ms.
 - **The held look comes from `isPressing`, never from `:active`.** `:active`
   matches the element the press _started_ on and holds there for the whole
   gesture, so during a drag two cells looked held at once: the one under the

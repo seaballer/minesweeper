@@ -326,7 +326,19 @@ function CellButton({
                 // Every effect here is paint-only (background, shadow, colour),
                 // which cannot change a hit box. Reveal feedback is the surface
                 // fading and flattening, not the cell resizing.
-                transition: 'background-color 140ms ease, box-shadow 120ms ease',
+                //
+                // But a held cell must arrive at its held look INSTANTLY. A
+                // transition on the way in means the cell the pointer just
+                // reached is still partway down, and sweeping across the board
+                // outruns the animation, so the fully-held frame is never
+                // actually painted — the whole gesture reads as unstyled. So the
+                // transition is switched off while this cell is the held one, and
+                // on again the moment it is not. That still animates the release:
+                // a cell dropping out of the held look eases back up, which is
+                // the feedback that the press committed.
+                transition: isPressing
+                    ? 'none'
+                    : 'background-color 140ms ease, box-shadow 120ms ease',
                 // Drops the 300ms tap delay without disabling panning, so the
                 // board can still be scrolled on a phone.
                 touchAction: 'manipulation',
