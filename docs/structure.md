@@ -91,25 +91,34 @@ packages MUI needs; dev dependencies are Vite 8, the React plugin, ESLint with
 The UI half of `npm test`, and it runs first. There is no test framework: it
 builds a jsdom document, starts a Vite dev server for SSR module loading, mounts
 the real `App` inside `ThemeProvider` + `CssBaseline`, and drives it with
-dispatched events, asserting along the way (319 assertions).
+dispatched events, asserting along the way (341 assertions).
 
 What it covers, in file order: theme and generated-class sanity, cell styling and
-the live region, the press-not-click path and the `memo`/`version` repaint guard,
-reset / difficulty / end-of-game, board semantics and roving-tabindex keyboard
-navigation, layout of the readouts and title, the info popover and the custom
-field clamping, the `R` shortcut, board sizing arithmetic (importing `CELL`,
-`GAP` and `BOARD_CHROME` from `Board.jsx` rather than copying them),
-source-level bans on transforms and on gradients passed to `backgroundColor`,
+the live region, the held-press gesture (arm, follow, commit on release) and the
+`memo`/`version` repaint guard, reset / difficulty / end-of-game, board semantics
+and roving-tabindex keyboard navigation including the cursor going home on a new
+board, layout of the readouts and title, the info popover and the custom field
+clamping, the `R` shortcut, board sizing arithmetic (importing `CELL`, `GAP` and
+`BOARD_CHROME` from `Board.jsx` rather than copying them), source-level bans on
+transforms, on gradients passed to `backgroundColor`, and on the hit-area overlay
+being anything that would move the box rather than paint over the gap,
 out-of-range coordinates, wrong flags, the `Grid.flagCount` tally, the best-times
 store and its leaderboard popover, degenerate boards, touch long-press, the seed
 input, the detonated cluster, the custom difficulty (config and UI), and the
 timer. Exits non-zero on any failure or unhandled error.
 
-Use it as the place to add a regression assertion when you fix a bug. Note its
-limitation: `element.click()` dispatches a finished click, so it cannot
-reproduce down/up target disagreement — assert on `pointerdown` or drive a real
-browser. It also cannot move focus; use `.focus()`, or a real browser for
-anything about keyboard navigation.
+Use it as the place to add a regression assertion when you fix a bug. Know its
+three limits, because each has now hidden a real bug: `element.click()` dispatches
+a finished click, so it cannot reproduce a press or a drag — dispatch
+`pointerdown` / `pointermove` / `pointerup` individually; it cannot move focus,
+so use `.focus()`; and it does no layout or hit-testing, so the gap-to-cell
+coverage is a check on the shape of the fix, not a pixel sweep.
+
+**There is no browser driver in this repo.** Anything settled only by real
+layout, real hit-testing, or a real accessibility tree — whether `display:
+contents` keeps a row in that tree, whether every pixel of every pitch resolves to
+a cell, whether a real click focuses a button — is an untested assumption.
+`AGENTS.md` records which ones are still open.
 
 The other half of `npm test` is `test/model.test.js`, which needs none of this.
 
@@ -210,20 +219,37 @@ Touch it for: the popover's wording, the list layout, the `KEEP` caption.
 ### components/Board.jsx
 
 The minefield: a CSS grid of `grid.cells` mapped one-to-one onto `CellButton`s,
-with the bezel styling that makes it read as a panel sunk into the page. Also
-the keyboard layer — it owns the cursor and every navigation key.
+with the bezel styling that makes it read as a panel sunk into the page. It is
+also the **owner of the pointer press and of the keyboard cursor** — the two
+pieces of interaction the cells deliberately do not own themselves.
 
 Also the owner of board geometry, exported so the sizing arithmetic has one
 definition: `CELL` (30, fixed), `GAP` (3), `PAD` (16), `BORDER` (1), and the
-derived `BOARD_CHROME`. It sets `--cell` on the grid so tracks and cells cannot
-disagree.
+derived `BOARD_CHROME`. It publishes two of them as custom properties so nothing
+downstream can disagree: `--cell`, read by both the grid tracks and the cells,
+and `--gap`, read by each cell to grow its own hit area across the spacing.
 
-It is a real ARIA `grid`: `role="grid"` with `aria-rowcount` / `aria-colcount`,
-owned `row` and `gridcell` elements, and 2-D arrow-key navigation. The rows are
-`display: contents`, so a row owns the semantics without owning a box and the
-cells stay direct children of the CSS grid. **It was `role="group"` for exactly
-as long as that structure was missing — if you take the navigation away, put the
-role back to `group`.**
+**The press.** It arms on `pointerdown`, follows the pointer while the button is
+held, and commits on `pointerup` against the cell under the cursor at that
+moment — so a drag opens the cell you _let go over_. Only a primary-button,
+non-touch press arms: touch keeps its long-press path in the cell, and right and
+middle press are flag and chord, which the cell handles itself. Arming is a ref
+and the highlighted cell is state, so arming costs no render and moving the
+highlight changes exactly two cells' props. A release that lands in a gap falls
+back to the highlighted cell, and a release off the board commits nothing. The
+eligibility check calls `cellGestures`, the same function the cell uses. See
+"Contracts" below, and `AGENTS.md` for why `click` and `pointerdown` were both
+wrong answers.
+
+**The keyboard cursor.** It is a real ARIA `grid`: `role="grid"` with
+`aria-rowcount` / `aria-colcount`, owned `row` and `gridcell` elements, and 2-D
+arrow-key navigation. The rows are `display: contents`, so a row owns the
+semantics without owning a box and the cells stay direct children of the CSS
+grid. **It was `role="group"` for exactly as long as that structure was missing —
+if you take the navigation away, put the role back to `group`.** One thing
+`npm test` cannot confirm is whether `display: contents` drops a box from the
+accessibility tree: the suite asserts the roles exist and are owned, and jsdom
+has no tree to inspect. That claim needs a real browser.
 
 The board is **one tab stop, not one per cell**, via a roving tabindex: exactly
 one cell carries `tabIndex={0}` and the rest `-1`, so Tab enters the grid once and
@@ -242,19 +268,53 @@ the whole board with `Ctrl` / `Cmd`) — and `preventDefault`s them so running o
 an edge cannot scroll the page; `f`, `c`, Enter and Space fall through to the
 cell. Movement clamps rather than wrapping.
 
+It also suppresses the browser context menu across the whole board, so the menu
+can never open over a Minesweeper gesture. That handler is a **prop, not an `sx`
+key** — `sx` is a style object, so a function in one is read as an interpolator
+and called with the theme instead of with the event.
+
 Touch it for: cell size, gap, bezel look, grid semantics, the keyboard map, the
-`version` prop.
+press gesture, the context-menu suppression, the `version` and `boardId` props.
 
 ### components/CellButton.jsx
 
 One cell: rendering (mine glyph, wrong-flag cross, flag, or the neighbour count)
-and the entire input vocabulary. Three separate predicates gate the gestures —
-`canReveal`, `canFlag`, `canChord` — plus `LONG_PRESS_MS` for touch, the
-`PRESSED_SHADOW` press feedback, and the `NUMBER_COLORS` digit palette.
+and the gestures `Board` does not own. The three predicates that decide what
+activating it does come from `cellGestures` in `game/Cell.js`, not from local
+logic — `Board` calls the same function to work out what a drag-release should
+commit. Also `LONG_PRESS_MS` for touch, `PRESSED_SHADOW` for the held look, and
+the `NUMBER_COLORS` digit palette.
 
-It also receives the two roving-tabindex props from `Board`: `tabIndex` and
-`cellRef`, the `row-col` string `Board` focuses through. Keep the prop list flat
-primitives.
+It receives three props from `Board` beyond its cell state and callbacks:
+`tabIndex` and `cellRef` for the roving tabindex (the `row-col` string `Board`
+focuses through, which is also what makes it a `gridcell`), and `isPressing` for
+the held look. In the other direction it emits `data-pressing` while held, as a
+test hook rather than an ARIA state a screen reader would have to interpret. Keep
+the prop list flat primitives.
+
+**Input.** A mouse press is committed by `Board` on `pointerup`, so this cell
+acts on neither `click` nor `pointerdown` — `onClick` is here only for what a
+mouse press does not cover, told apart by a `touchedByFinger` ref and by
+`event.detail === 0` for keyboard activation. Right click flags an unflagged
+cell, removes a flag, or chords on a revealed number — it has to work both ways
+so a misplaced flag never needs a reset. Middle click chords, always suppressed
+so the middle-drag cursor is never left armed on other cells. Touch long-presses
+to flag, and `f` and `c` are the keyboard equivalents of right-click and
+chording.
+
+**The held look** comes from the `isPressing` prop and never from `:active`,
+which matches the cell the press _started_ on and so contradicts the board during
+a drag. `transition` is `none` while held, because a held cell that eases in is
+one a fast sweep outruns — the fully-held frame is never painted. The release
+still animates, which is the feedback that the press committed.
+
+**The hit area is larger than the key.** An invisible `::after` overlay grows
+right and down by a full `--gap`, so the 3px between two keys belongs to a cell
+rather than to the board, where a right-click flagged nothing and opened the
+browser menu. It overlaps the next cell rather than splitting the gap in halves,
+because at an odd gap the halves cannot meet. It is a pseudo-element rather than
+a negative margin or `transform` on the cell, either of which would move the box
+the browser hit-tests against.
 
 Hover branches on the surface, and the two branches are mutually exclusive.
 `canReveal` gets the raised-key gradient (`keyHoverTop` → `keyHoverBottom`),
@@ -263,14 +323,11 @@ a heavier version of the revealed cell's own flat wash, because a revealed
 number is flat — giving it the raised gradient made it look like a hidden key
 again, exactly backwards for the one cell you are being invited to click.
 
-Input contract worth preserving: mouse acts on `pointerdown` (primary button,
-touch excluded), with `actedOnPress` swallowing the follow-up click and
-`onPointerLeave` clearing that flag; right click flags or chords; middle click
-chords; `f` and `c` are the keyboard equivalents; touch long-press flags. No
-`transform` or scale may return on a cell in any state — it moves the hit box.
+No `transform` or scale may return on a cell in any state — it moves the hit box.
 
-Touch it for: cell appearance, digit colours, hover treatment, gesture
-behaviour, accessibility label text.
+Touch it for: cell appearance, digit colours, hover and held treatment, the
+right-click and middle-click gestures, the hit-area overlay, accessibility label
+text.
 
 ### components/ControlBar.jsx
 
@@ -345,13 +402,16 @@ two are self-contained utilities.
 Owns the `Grid` instance and every action the UI can take: `reveal`,
 `toggleFlag`, `chord`, `reset`, `changeDifficulty`, `applyCustomSize`. Returns
 the model plus derived readouts (`status`, `isOver`, `minesRemaining`,
-`allMinesFlagged`, `elapsed`, `timerRunning`) and `version`.
+`allMinesFlagged`, `elapsed`, `timerRunning`), the `version` repaint token, and
+`boardId`.
 
 The `Grid` is `useMemo`d on `[difficultyKey, customSize]`, so changing either
 builds a fresh board rather than mutating one. `version` is an invalidation
 token bumped after every mutation — it is not game state, nothing branches on
-its value, and it exists so `memo`ized consumers repaint. Read the header comment
-before changing anything here.
+its value, and it exists so `memo`ized consumers repaint. `boardId` is the
+`gameId` that already restarts the clock, published under the name the view
+uses it by: `Board` needs to know a new board arrived, so it can send the
+keyboard cursor home. Read the header comment before changing anything here.
 
 ### hooks/useTimer.js
 
@@ -406,6 +466,20 @@ One cell's state: `isMine`, `isExploded`, `isFlagged`, `isVisible`,
 `isWrongFlag`, `neighborMines`, and the three mutators `reveal()`,
 `toggleFlag()`, `placeMine()`. Mutated in place by `Grid` and never replaced —
 this is the root cause of the `memo` contract below.
+
+It also exports `cellGestures`, the single definition of what activating a cell
+does: `canReveal`, `canFlag`, `canChord`, derived from state. `CellButton` uses
+it for its own gestures and `Board` uses it to decide what a drag-release
+commits, which is why it lives in the model rather than in either component — two
+copies of those three rules is how flag removal once vanished, the cell thinking
+it was revealed and the board thinking it was flaggable. It takes the flags it
+needs rather than a `Cell`, so it works for a live cell and a plain object
+alike. **It is the only policy in this file, and the only export that is not
+state**; if you add a gesture, add its rule here rather than to a component.
+
+Note that this makes `src/game/` a dependency of `src/components/` for the first
+time. The dependency still points one way — nothing in `game/` may import a
+component, a hook, or MUI — so the model remains testable in bare Node.
 
 ### game/difficulties.js
 
@@ -476,33 +550,58 @@ another. `AGENTS.md` has the full reasoning; the short version:
    not repaint. `CellButton` takes flat primitives for this reason.
 2. **`Board` is `memo`ized and survives on `version` alone.** On a click, none of
    its real props change. Do not drop `version` from its props or from `App`,
-   or the board goes dead while the model keeps working.
-3. **Cells act on `pointerdown`, not `click`.** A browser sends a click to the
-   nearest common ancestor when press and release targets disagree, which is
-   exactly what a fast sweep across the board produces. The guards around it
-   (primary button only, touch excluded, follow-up click swallowed) are
-   load-bearing and each has an assertion.
-4. **No `transform` on a cell, ever.** It changes the hit box, not just the
+   or the board goes dead while the model keeps working. `boardId` is the second
+   prop that moves, and it means something different: a new board, not a repaint.
+3. **`Board` owns the press; a cell acts on neither `click` nor `pointerdown`.**
+   Both were tried and both were wrong. A browser fires `click` only when the
+   press and release targets agree, sending it to their nearest common ancestor
+   otherwise, which loses every fast sweep. `pointerdown` opens the cell the
+   press _started_ on, so a drag opens the wrong cell. The board arms on
+   `pointerdown`, follows the pointer, and commits on `pointerup` against the
+   cell under the cursor at that moment — `pointerup` has no agreement
+   requirement. A cell's `onClick` is now only for touch taps and keyboard
+   activation.
+4. **The held look is `isPressing`, never `:active`, and has no transition while
+   held.** `:active` matches the cell the press started on, so during a drag two
+   cells looked held; the board owns the tracked cell. A held cell that eases in
+   is one a fast sweep outruns, so the fully-held frame is never painted and the
+   gesture reads as no styling at all. Dropping out of the held look still
+   animates, which is what says the press committed.
+5. **`cellGestures` in `game/Cell.js` is the single definition of "what does
+   activating this cell do."** `CellButton` and `Board` both call it. Two copies
+   of `canReveal` / `canFlag` / `canChord` is how flag removal once vanished, the
+   cell thinking it was revealed and the board thinking it was flaggable.
+6. **The gap belongs to a cell.** Cells are 30px in a 33px pitch, so 3px of every
+   pitch used to belong to the board, and a right-click there flagged nothing and
+   opened the browser menu. Each cell grows a `::after` overlay right and down by
+   a full `--gap`, read from the token the board sets, so the two cannot disagree.
+   Overlap beats splitting the gap in halves, which leaves a dead column at an
+   odd gap. It has to stay a pseudo-element: a negative margin or `transform`
+   would move the box the browser hit-tests against.
+7. **No `transform` on a cell, ever.** It changes the hit box, not just the
    look. Press feedback is a shadow; reveal feedback is the raised face fading.
-5. **`board.*` is interpolated, never written as a dotted `sx` string.**
+8. **`board.*` is interpolated, never written as a dotted `sx` string.**
    `'board.revealed'` is not a theme path to MUI; it reaches the stylesheet
    verbatim as `background-color: board.revealed`, which is not a colour, so the
    browser drops it. A source assertion is the only thing that catches this,
    because the declared value can look perfect while nothing renders.
-6. **Gradients go through `backgroundImage`, never `backgroundColor`.** A
+9. **Gradients go through `backgroundImage`, never `backgroundColor`.** A
    gradient in `backgroundColor` is silently dropped and renders transparent.
-7. **Cell size is a constant 30px**, exposed as `--cell` and exported as `CELL`
-   so `Board.jsx` and `ui-check.mjs` agree. It is not responsive by decision.
-8. **The board is one tab stop.** Exactly one cell has `tabIndex={0}`, and
-   `Board` owns the roving cursor and the arrow-key map. If the navigation goes,
-   `role="grid"` has to go back to `role="group"` — a grid that does not move
-   focus in two dimensions is a promise the app is not keeping.
-9. **A win is banked once, on the transition.** `App` keeps `previousStatus` in a
-   ref and records when the status _becomes_ `win`; testing `status === 'win'`
-   directly would bank the same run again on every render while the banner is up.
-   Only `RANKED_DIFFICULTIES` are ranked, and `isRanked` is what removes the
-   trophy on a custom board.
-10. **Colours come from `theme.js`.** No hardcoded hex in a component.
+10. **Cell size is a constant 30px**, exposed as `--cell` and exported as `CELL`
+    so `Board.jsx` and `ui-check.mjs` agree. It is not responsive by decision.
+11. **The board is one tab stop, and the cursor goes home.** Exactly one cell has
+    `tabIndex={0}`, and `Board` owns the roving cursor and the arrow-key map. The
+    cursor is clamped at read time, so a smaller board cannot leave the grid with
+    nothing tabbable, and reset on `boardId` during render, because a reset keeps
+    the same dimensions and the clamp cannot catch that. If the navigation goes,
+    `role="grid"` has to go back to `role="group"` — a grid that does not move
+    focus in two dimensions is a promise the app is not keeping.
+12. **A win is banked once, on the transition.** `App` keeps `previousStatus` in a
+    ref and records when the status _becomes_ `win`; testing `status === 'win'`
+    directly would bank the same run again on every render while the banner is up.
+    Only `RANKED_DIFFICULTIES` are ranked, and `isRanked` is what removes the
+    trophy on a custom board.
+13. **Colours come from `theme.js`.** No hardcoded hex in a component.
 
 ## Where to start for a specific change
 
@@ -512,8 +611,12 @@ another. `AGENTS.md` has the full reasoning; the short version:
 | Page background, fonts, reduced motion                    | `src/index.css`                                          |
 | Layout, ordering, max width, popover state, banking a win | `src/App.jsx`                                            |
 | Cell size, gap, bezel, grid semantics, keyboard map       | `src/components/Board.jsx`                               |
-| How a cell looks, digit colours, hover, press feedback    | `src/components/CellButton.jsx`                          |
-| Mouse / touch / keyboard gestures                         | `src/components/CellButton.jsx`                          |
+| The press: arm, follow, commit on release                 | `src/components/Board.jsx`                               |
+| Suppressing the browser context menu over the board       | `src/components/Board.jsx`                               |
+| How a cell looks, digit colours, hover, held look         | `src/components/CellButton.jsx`                          |
+| Right-click / middle-click / long-press / `f` / `c`       | `src/components/CellButton.jsx`                          |
+| A cell's hit area covering the gap between keys           | `src/components/CellButton.jsx`                          |
+| What activating a cell does, for either component         | `src/game/Cell.js`                                       |
 | Cell aria-label text                                      | `src/components/CellButton.jsx`                          |
 | Mine counter, Reset button, timer row                     | `src/components/ControlBar.jsx`                          |
 | Win / loss wording                                        | `src/components/StatusBanner.jsx`                        |
